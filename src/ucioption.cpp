@@ -75,8 +75,7 @@ void init(OptionsMap& o) {
     o["Ponder"]                              << Option(false);
     o["MultiPV"]                             << Option(1, 1, 500);
     o["Skill Level"]                         << Option(20, 0, 20);
-    o["Move Overhead"]                       << Option(10, 0, 5000);
-    o["Minimum Thinking Time"]               << Option(100, 0, 5000);
+    o["MoveOverhead"]                        << Option(10, 0, 5000);
 	o["nodestime"]                           << Option(0, 0, 10000);
     o["UCI_Chess960"]                        << Option(false);
     o["UCI_LimitStrength"]                   << Option(false);
@@ -87,8 +86,7 @@ void init(OptionsMap& o) {
     o["Syzygy50MoveRule"]                    << Option(true);
     o["SyzygyProbeLimit"]                    << Option(7, 0, 7);
     o["EvalFile"]                            << Option(EvalFileDefaultNameBig, on_eval_file);
-    // Enable this after fishtest workers support EvalFileSmall
-    // o["EvalFileSmall"]                    << Option(EvalFileDefaultNameSmall, on_eval_file);
+    o["EvalFileSmall"]                       << Option(EvalFileDefaultNameSmall, on_eval_file);
 }
 
 

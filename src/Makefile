@@ -38,22 +38,18 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-ifeq ($(target_windows),yes)
-	EXE = Hypnos.exe
-else
-	EXE = Hypnos
-endif
+# ifeq ($(target_windows),yes)
+# 	EXE = stockfish.exe
+# else
+# 	EXE = stockfish
+# endif
 
 ### Installation dir definitions
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
 ### Built-in benchmark for pgo-builds
-ifeq ($(SDE_PATH),)
-	PGOBENCH = $(WINE_PATH) ./$(EXE) bench
-else
-	PGOBENCH = $(SDE_PATH) -icx -- $(WINE_PATH) ./$(EXE) bench
-endif
+PGOBENCH = $(WINE_PATH) ./$(EXE) bench
 
 ### Source and object files
 SRCS = benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
@@ -791,9 +787,15 @@ endif
 ### Section 4. Public Targets
 ### ==========================================================================
 
+CXXFLAGS += -DEvalFileDefaultNameBig=\"$(EVALFILE)\"
+CXXFLAGS += -DEvalFileDefaultNameSmall=\"nn-baff1ede1f90.nnue\"
+
+build: config-sanity
+	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
+
 help:
 	@echo ""
-	@echo "To compile Hypnos, type: "
+	@echo "To compile stockfish, type: "
 	@echo ""
 	@echo "make -j target [ARCH=arch] [COMP=compiler] [COMPCXX=cxx]"
 	@echo ""
@@ -873,16 +875,14 @@ endif
 analyze: net config-sanity objclean
 	$(MAKE) -k ARCH=$(ARCH) COMP=$(COMP) $(OBJS)
 
-build: net config-sanity
-	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
-
 profile-build: net config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 1/4. Building instrumented executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
 	@echo ""
 	@echo "Step 2/4. Running benchmark for pgo-build ..."
-	$(PGOBENCH)
+	$(PGOBENCH) > PGOBENCH.out 2>&1
+	tail -n 4 PGOBENCH.out
 	@echo ""
 	@echo "Step 3/4. Building optimized executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) objclean
@@ -905,16 +905,16 @@ clean: objclean profileclean
 
 # clean binaries and objects
 objclean:
-	@rm -f Hypnos Hypnos.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o
+	@rm -f stockfish stockfish.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o
 
 # clean auxiliary profiling files
 profileclean:
 	@rm -rf profdir
 	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./nnue/*.gcda ./nnue/features/*.gcda *.s PGOBENCH.out
-	@rm -f Hypnos.profdata *.profraw
-	@rm -f Hypnos.*args*
-	@rm -f Hypnos.*lt*
-	@rm -f Hypnos.res
+	@rm -f stockfish.profdata *.profraw
+	@rm -f stockfish.*args*
+	@rm -f stockfish.*lt*
+	@rm -f stockfish.res
 	@rm -f ./-lstdc++.res
 
 define fetch_network
@@ -984,7 +984,7 @@ default:
 
 all: $(EXE) .depend
 
-config-sanity: net
+config-sanity:
 	@echo ""
 	@echo "Config:"
 	@echo "debug: '$(debug)'"
@@ -1056,9 +1056,9 @@ clang-profile-make:
 	all
 
 clang-profile-use:
-	$(XCRUN) llvm-profdata merge -output=Hypnos.profdata *.profraw
+	$(XCRUN) llvm-profdata merge -output=stockfish.profdata *.profraw
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-instr-use=Hypnos.profdata' \
+	EXTRACXXFLAGS='-fprofile-instr-use=stockfish.profdata' \
 	EXTRALDFLAGS='-fprofile-use ' \
 	all
 
@@ -1084,9 +1084,9 @@ icx-profile-make:
 	all
 
 icx-profile-use:
-	$(XCRUN) llvm-profdata merge -output=Hypnos.profdata *.profraw
+	$(XCRUN) llvm-profdata merge -output=stockfish.profdata *.profraw
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-instr-use=Hypnos.profdata' \
+	EXTRACXXFLAGS='-fprofile-instr-use=stockfish.profdata' \
 	EXTRALDFLAGS='-fprofile-use ' \
 	all
 
