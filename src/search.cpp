@@ -77,7 +77,7 @@ enum NodeType {
 
 // Futility margin
 Value futility_margin(Depth d, bool noTtCutNode, bool improving, bool oppWorsening) {
-    Value futilityMult       = 117 - 44 * noTtCutNode;
+    Value futilityMult       = 121 - 43 * noTtCutNode;
     Value improvingDeduction = 3 * improving * futilityMult / 2;
     Value worseningDeduction = (331 + 45 * improving) * oppWorsening * futilityMult / 1024;
 
@@ -103,10 +103,10 @@ constexpr Value to_static_eval(const Value v) {
 }
 
 // History and stats update bonus, based on depth
-int stat_bonus(Depth d) { return std::min(246 * d - 351, 1136); }
+int stat_bonus(Depth d) { return std::min(249 * d - 327, 1192); }
 
 // History and stats update malus, based on depth
-int stat_malus(Depth d) { return std::min(519 * d - 306, 1258); }
+int stat_malus(Depth d) { return std::min(516 * d - 299, 1432); }
 
 // Add a small random component to draw evaluations to avoid 3-fold blindness
 Value value_draw(const Thread* thisThread) {
@@ -285,7 +285,6 @@ void MainThread::search() {
     std::cout << sync_endl;
 }
 
-
 // Main iterative deepening loop. It calls search()
 // repeatedly with increasing depth until the allocated thinking time has been
 // consumed, the user stops the search, or the maximum search depth is reached.
@@ -376,12 +375,12 @@ void Thread::search() {
 
             // Reset aspiration window starting size
             Value avg = rootMoves[pvIdx].averageScore;
-            delta     = Value(9) + int(avg) * avg / 12487;
+            delta     = Value(9) + int(avg) * avg / 12804;
             alpha     = std::max(avg - delta, -VALUE_INFINITE);
             beta      = std::min(avg + delta, int(VALUE_INFINITE));
 
             // Adjust optimism based on root move's averageScore (~4 Elo)
-            optimism[us]  = 134 * avg / (std::abs(avg) + 97);
+            optimism[us]  = 131 * avg / (std::abs(avg) + 90);
             optimism[~us] = -optimism[us];
 
             // Start with a small aspiration window and, in the case of a fail
@@ -790,7 +789,7 @@ Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, boo
                 ? ss->staticEval > (ss - 2)->staticEval
                 : (ss - 4)->staticEval != VALUE_NONE && ss->staticEval > (ss - 4)->staticEval;
 
-    opponentWorsening = ss->staticEval + (ss - 1)->staticEval > 2 && (depth != 2 || !improving);
+    opponentWorsening = ss->staticEval + (ss - 1)->staticEval > 2;
 
     // Step 7. Razoring (~1 Elo)
     // If eval is really low check with qsearch if it can exceed alpha, if it can't,
@@ -1652,7 +1651,6 @@ Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth) {
     if (ss->inCheck && bestValue == -VALUE_INFINITE)
     {
         assert(!MoveList<LEGAL>(pos).size());
-
         return mated_in(ss->ply);  // Plies to mate from the root
     }
 
@@ -1677,7 +1675,6 @@ Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth) {
 Value value_to_tt(Value v, int ply) {
 
     assert(v != VALUE_NONE);
-
     return v >= VALUE_TB_WIN_IN_MAX_PLY ? v + ply : v <= VALUE_TB_LOSS_IN_MAX_PLY ? v - ply : v;
 }
 
@@ -1962,7 +1959,6 @@ string UCI::pv(const Position& pos, Depth depth) {
     return ss.str();
 }
 
-
 // Called in case we have no ponder move before exiting the search,
 // for instance, in case we stop the search during a fail high at root.
 // We try hard to have a ponder move to return to the GUI,
@@ -1975,7 +1971,6 @@ bool RootMove::extract_ponder_from_tt(Position& pos) {
     bool ttHit;
 
     assert(pv.size() == 1);
-
     if (pv[0] == MOVE_NONE)
         return false;
 
