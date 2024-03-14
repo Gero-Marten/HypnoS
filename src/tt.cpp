@@ -19,6 +19,7 @@
 #include "tt.h"
 
 #include <cassert>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -26,20 +27,17 @@
 #include <vector>
 
 #include "misc.h"
-#include "thread.h"
-#include "uci.h"
 
 namespace Stockfish {
 
-TranspositionTable TT;  // Our global transposition table
-
 // Populates the TTEntry with a new node's data, possibly
 // overwriting an old position. The update is not atomic and can be racy.
-void TTEntry::save(Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev) {
+void TTEntry::save(
+  Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev, uint8_t generation8) {
 
     // Preserve any existing move for the same position
     if (m || uint16_t(k) != key16)
-        move16 = uint16_t(m);
+        move16 = m;
 
     // Overwrite less valuable entries (cheapest checks first)
     if (b == BOUND_EXACT || uint16_t(k) != key16 || d - DEPTH_OFFSET + 2 * pv > depth8 - 4)
@@ -49,20 +47,29 @@ void TTEntry::save(Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev) 
 
         key16     = uint16_t(k);
         depth8    = uint8_t(d - DEPTH_OFFSET);
-        genBound8 = uint8_t(TT.generation8 | uint8_t(pv) << 2 | b);
+        genBound8 = uint8_t(generation8 | uint8_t(pv) << 2 | b);
         value16   = int16_t(v);
         eval16    = int16_t(ev);
     }
 }
 
 
+uint8_t TTEntry::relative_age(const uint8_t generation8) const {
+    // Due to our packed storage format for generation and its cyclic
+    // nature we add GENERATION_CYCLE (256 is the modulus, plus what
+    // is needed to keep the unrelated lowest n bits from affecting
+    // the result) to calculate the entry age correctly even after
+    // generation8 overflows into the next cycle.
+
+    return (TranspositionTable::GENERATION_CYCLE + generation8 - genBound8)
+         & TranspositionTable::GENERATION_MASK;
+}
+
+
 // Sets the size of the transposition table,
 // measured in megabytes. Transposition table consists of a power of 2 number
 // of clusters and each cluster consists of ClusterSize number of TTEntry.
-void TranspositionTable::resize(size_t mbSize) {
-
-    Threads.main()->wait_for_search_finished();
-
+void TranspositionTable::resize(size_t mbSize, int threadCount) {
     aligned_large_pages_free(table);
 
     clusterCount = mbSize * 1024 * 1024 / sizeof(Cluster);
@@ -74,28 +81,25 @@ void TranspositionTable::resize(size_t mbSize) {
         exit(EXIT_FAILURE);
     }
 
-    clear();
+    clear(threadCount);
 }
 
 
 // Initializes the entire transposition table to zero,
 // in a multi-threaded way.
-void TranspositionTable::clear() {
-
+void TranspositionTable::clear(size_t threadCount) {
     std::vector<std::thread> threads;
 
-    for (size_t idx = 0; idx < size_t(Options["Threads"]); ++idx)
+    for (size_t idx = 0; idx < size_t(threadCount); ++idx)
     {
-        threads.emplace_back([this, idx]() {
+        threads.emplace_back([this, idx, threadCount]() {
             // Thread binding gives faster search on systems with a first-touch policy
-            if (Options["Threads"] > 8)
+            if (threadCount > 8)
                 WinProcGroup::bindThisThread(idx);
 
             // Each thread will zero its part of the hash table
-            const size_t stride = size_t(clusterCount / Options["Threads"]),
-                         start  = size_t(stride * idx),
-                         len =
-                           idx != size_t(Options["Threads"]) - 1 ? stride : clusterCount - start;
+            const size_t stride = size_t(clusterCount / threadCount), start = size_t(stride * idx),
+                         len = idx != size_t(threadCount) - 1 ? stride : clusterCount - start;
 
             std::memset(&table[start], 0, len * sizeof(Cluster));
         });
@@ -120,24 +124,18 @@ TTEntry* TranspositionTable::probe(const Key key, bool& found) const {
     for (int i = 0; i < ClusterSize; ++i)
         if (tte[i].key16 == key16 || !tte[i].depth8)
         {
-            tte[i].genBound8 =
-              uint8_t(generation8 | (tte[i].genBound8 & (GENERATION_DELTA - 1)));  // Refresh
+            constexpr uint8_t lowerBits = GENERATION_DELTA - 1;
 
-            return found = bool(tte[i].depth8), &tte[i];
+            // Refresh with new generation, keeping the lower bits the same.
+            tte[i].genBound8 = uint8_t(generation8 | (tte[i].genBound8 & lowerBits));
+            return found     = bool(tte[i].depth8), &tte[i];
         }
 
     // Find an entry to be replaced according to the replacement strategy
     TTEntry* replace = tte;
     for (int i = 1; i < ClusterSize; ++i)
-        // Due to our packed storage format for generation and its cyclic
-        // nature we add GENERATION_CYCLE (256 is the modulus, plus what
-        // is needed to keep the unrelated lowest n bits from affecting
-        // the result) to calculate the entry age correctly even after
-        // generation8 overflows into the next cycle.
-        if (replace->depth8
-              - ((GENERATION_CYCLE + generation8 - replace->genBound8) & GENERATION_MASK)
-            > tte[i].depth8
-                - ((GENERATION_CYCLE + generation8 - tte[i].genBound8) & GENERATION_MASK))
+        if (replace->depth8 - replace->relative_age(generation8) * 2
+            > tte[i].depth8 - tte[i].relative_age(generation8) * 2)
             replace = &tte[i];
 
     return found = false, replace;
@@ -146,7 +144,7 @@ TTEntry* TranspositionTable::probe(const Key key, bool& found) const {
 
 // Returns an approximation of the hashtable
 // occupation during a search. The hash is x permill full, as per UCI protocol.
-
+// Only counts entries which match the current generation.
 int TranspositionTable::hashfull() const {
 
     int cnt = 0;

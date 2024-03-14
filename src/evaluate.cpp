@@ -22,155 +22,17 @@
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
-#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
-#include <unordered_map>
-#include <vector>
 
-#include "incbin/incbin.h"
-#include "misc.h"
-#include "nnue/evaluate_nnue.h"
-#include "nnue/nnue_architecture.h"
+#include "nnue/network.h"
+#include "nnue/nnue_misc.h"
 #include "position.h"
-#include "thread.h"
 #include "types.h"
 #include "uci.h"
 
-// Macro to embed the default efficiently updatable neural network (NNUE) file
-// data in the engine binary (using incbin.h, by Dale Weiler).
-// This macro invocation will declare the following three variables
-//     const unsigned char        gEmbeddedNNUEData[];  // a pointer to the embedded data
-//     const unsigned char *const gEmbeddedNNUEEnd;     // a marker to the end
-//     const unsigned int         gEmbeddedNNUESize;    // the size of the embedded file
-// Note that this does not work in Microsoft Visual Studio.
-#if !defined(_MSC_VER) && !defined(NNUE_EMBEDDING_OFF)
-INCBIN(EmbeddedNNUEBig, EvalFileDefaultNameBig);
-INCBIN(EmbeddedNNUESmall, EvalFileDefaultNameSmall);
-#else
-const unsigned char        gEmbeddedNNUEBigData[1]   = {0x0};
-const unsigned char* const gEmbeddedNNUEBigEnd       = &gEmbeddedNNUEBigData[1];
-const unsigned int         gEmbeddedNNUEBigSize      = 1;
-const unsigned char        gEmbeddedNNUESmallData[1] = {0x0};
-const unsigned char* const gEmbeddedNNUESmallEnd     = &gEmbeddedNNUESmallData[1];
-const unsigned int         gEmbeddedNNUESmallSize    = 1;
-#endif
-
-
 namespace Stockfish {
-
-namespace Eval {
-
-std::unordered_map<NNUE::NetSize, EvalFile> EvalFiles = {
-  {NNUE::Big, {"EvalFile", EvalFileDefaultNameBig, "None"}},
-  {NNUE::Small, {"EvalFileSmall", EvalFileDefaultNameSmall, "None"}}};
-
-
-// Tries to load a NNUE network at startup time, or when the engine
-// receives a UCI command "setoption name EvalFile value nn-[a-z0-9]{12}.nnue"
-// The name of the NNUE network is always retrieved from the EvalFile option.
-// We search the given network in three locations: internally (the default
-// network may be embedded in the binary), in the active working directory and
-// in the engine directory. Distro packagers may define the DEFAULT_NNUE_DIRECTORY
-// variable to have the engine search in a special directory in their distro.
-void NNUE::init() {
-
-    for (auto& [netSize, evalFile] : EvalFiles)
-    {
-        // Replace with
-        // Options[evalFile.option_name]
-        // once fishtest supports the uci option EvalFileSmall
-        std::string user_eval_file =
-          netSize == Small ? evalFile.default_name : Options[evalFile.option_name];
-
-        if (user_eval_file.empty())
-            user_eval_file = evalFile.default_name;
-
-#if defined(DEFAULT_NNUE_DIRECTORY)
-        std::vector<std::string> dirs = {"<internal>", "", CommandLine::binaryDirectory,
-                                         stringify(DEFAULT_NNUE_DIRECTORY)};
-#else
-        std::vector<std::string> dirs = {"<internal>", "", CommandLine::binaryDirectory};
-#endif
-
-        for (const std::string& directory : dirs)
-        {
-            if (evalFile.selected_name != user_eval_file)
-            {
-                if (directory != "<internal>")
-                {
-                    std::ifstream stream(directory + user_eval_file, std::ios::binary);
-                    if (NNUE::load_eval(user_eval_file, stream, netSize))
-                        evalFile.selected_name = user_eval_file;
-                }
-
-                if (directory == "<internal>" && user_eval_file == evalFile.default_name)
-                {
-                    // C++ way to prepare a buffer for a memory stream
-                    class MemoryBuffer: public std::basic_streambuf<char> {
-                       public:
-                        MemoryBuffer(char* p, size_t n) {
-                            setg(p, p, p + n);
-                            setp(p, p + n);
-                        }
-                    };
-
-                    MemoryBuffer buffer(
-                      const_cast<char*>(reinterpret_cast<const char*>(
-                        netSize == Small ? gEmbeddedNNUESmallData : gEmbeddedNNUEBigData)),
-                      size_t(netSize == Small ? gEmbeddedNNUESmallSize : gEmbeddedNNUEBigSize));
-                    (void) gEmbeddedNNUEBigEnd;  // Silence warning on unused variable
-                    (void) gEmbeddedNNUESmallEnd;
-
-                    std::istream stream(&buffer);
-                    if (NNUE::load_eval(user_eval_file, stream, netSize))
-                        evalFile.selected_name = user_eval_file;
-                }
-            }
-        }
-    }
-}
-
-// Verifies that the last net used was loaded successfully
-void NNUE::verify() {
-
-    for (const auto& [netSize, evalFile] : EvalFiles)
-    {
-        // Replace with
-        // Options[evalFile.option_name]
-        // once fishtest supports the uci option EvalFileSmall
-        std::string user_eval_file =
-          netSize == Small ? evalFile.default_name : Options[evalFile.option_name];
-        if (user_eval_file.empty())
-            user_eval_file = evalFile.default_name;
-
-        if (evalFile.selected_name != user_eval_file)
-        {
-            std::string msg1 =
-              "Network evaluation parameters compatible with the engine must be available.";
-            std::string msg2 =
-              "The network file " + user_eval_file + " was not loaded successfully.";
-            std::string msg3 = "The UCI option EvalFile might need to specify the full path, "
-                               "including the directory name, to the network file.";
-            std::string msg4 = "The default net can be downloaded from: "
-                               "https://tests.stockfishchess.org/api/nn/"
-                             + evalFile.default_name;
-            std::string msg5 = "The engine will be terminated now.";
-
-            sync_cout << "info string ERROR: " << msg1 << sync_endl;
-            sync_cout << "info string ERROR: " << msg2 << sync_endl;
-            sync_cout << "info string ERROR: " << msg3 << sync_endl;
-            sync_cout << "info string ERROR: " << msg4 << sync_endl;
-            sync_cout << "info string ERROR: " << msg5 << sync_endl;
-
-            exit(EXIT_FAILURE);
-        }
-
-        sync_cout << "info string NNUE evaluation using " << user_eval_file << sync_endl;
-    }
-}
-}
 
 // Returns a static, purely materialistic evaluation of the position from
 // the point of view of the given color. It can be divided by PawnValue to get
@@ -183,7 +45,7 @@ int Eval::simple_eval(const Position& pos, Color c) {
 
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
-Value Eval::evaluate(const Position& pos) {
+Value Eval::evaluate(const Eval::NNUE::Networks& networks, const Position& pos, int optimism) {
 
     assert(!pos.checkers());
 
@@ -193,10 +55,8 @@ Value Eval::evaluate(const Position& pos) {
 
     int nnueComplexity;
 
-    Value nnue = smallNet ? NNUE::evaluate<NNUE::Small>(pos, true, &nnueComplexity, psqtOnly)
-                          : NNUE::evaluate<NNUE::Big>(pos, true, &nnueComplexity, false);
-
-        int optimism = pos.this_thread()->optimism[pos.side_to_move()];
+    Value nnue = smallNet ? networks.small.evaluate(pos, true, &nnueComplexity, psqtOnly)
+                          : networks.big.evaluate(pos, true, &nnueComplexity, false);
 
     // Blend optimism and eval with nnue complexity and material imbalance
     optimism += optimism * (nnueComplexity + std::abs(simpleEval - nnue)) / 524;
@@ -210,7 +70,7 @@ Value Eval::evaluate(const Position& pos) {
     v             = v * (195 - shuffling) / 228;
 
     // Guarantee evaluation does not hit the tablebase range
-    v = std::clamp(int(v), VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
+    v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
 
     return v;
 }
@@ -219,29 +79,22 @@ Value Eval::evaluate(const Position& pos) {
 // a string (suitable for outputting to stdout) that contains the detailed
 // descriptions and values of each evaluation term. Useful for debugging.
 // Trace scores are from white's point of view
-std::string Eval::trace(Position& pos) {
+std::string Eval::trace(Position& pos, const Eval::NNUE::Networks& networks) {
 
     if (pos.checkers())
         return "Final evaluation: none (in check)";
 
-    // Reset any global variable used in eval
-    pos.this_thread()->bestValue       = VALUE_ZERO;
-    pos.this_thread()->rootSimpleEval  = VALUE_ZERO;
-    pos.this_thread()->optimism[WHITE] = VALUE_ZERO;
-    pos.this_thread()->optimism[BLACK] = VALUE_ZERO;
-
     std::stringstream ss;
     ss << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2);
-    ss << '\n' << NNUE::trace(pos) << '\n';
+    ss << '\n' << NNUE::trace(pos, networks) << '\n';
 
     ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
 
-    Value v;
-    v = NNUE::evaluate<NNUE::Big>(pos, false);
-    v = pos.side_to_move() == WHITE ? v : -v;
+    Value v = networks.big.evaluate(pos, false);
+    v       = pos.side_to_move() == WHITE ? v : -v;
     ss << "NNUE evaluation        " << 0.01 * UCI::to_cp(v) << " (white side)\n";
 
-    v = evaluate(pos);
+    v = evaluate(networks, pos, VALUE_ZERO);
     v = pos.side_to_move() == WHITE ? v : -v;
     ss << "Final evaluation       " << 0.01 * UCI::to_cp(v) << " (white side)";
     ss << " [with scaled NNUE, ...]";

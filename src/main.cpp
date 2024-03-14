@@ -16,15 +16,11 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <cstddef>
 #include <iostream>
 
 #include "bitboard.h"
-#include "evaluate.h"
 #include "misc.h"
 #include "position.h"
-#include "search.h"
-#include "thread.h"
 #include "tune.h"
 #include "types.h"
 #include "uci.h"
@@ -33,33 +29,16 @@ using namespace Stockfish;
 
 int main(int argc, char* argv[]) {
 
-  SysInfo::init();
-  show_logo();
+    std::cout << engine_info() << std::endl;
 
-  std::cout << engine_info() << std::endl;
+    Bitboards::init();
+    Position::init();
 
-  CommandLine::init(argc, argv);
+    UCI uci(argc, argv);
 
-  std::cout
-      << "Operating System (OS) : " << SysInfo::os_info() << std::endl
-      << "CPU Brand             : " << SysInfo::processor_brand() << std::endl
-      << "NUMA Nodes            : " << SysInfo::numa_nodes() << std::endl
-      << "Cores                 : " << SysInfo::physical_cores() << std::endl
-      << "Threads               : " << SysInfo::logical_cores() << std::endl
-      << "Hyper-Threading       : " << SysInfo::is_hyper_threading() << std::endl
-      << "L1/L2/L3 cache size   : " << SysInfo::cache_info(0) << "/" << SysInfo::cache_info(1) << "/" << SysInfo::cache_info(2) << std::endl
-      << "Memory installed (RAM): " << SysInfo::total_memory() << std::endl << std::endl;
+    Tune::init(uci.options);
 
-  UCI::init(Options);
-  Tune::init();
-  Bitboards::init();
-  Position::init();
-  Threads.set(size_t(Options["Threads"]));
-  Search::clear(); // After threads are up
-  Eval::NNUE::init();
+    uci.loop();
 
-  UCI::loop(argc, argv);
-
-    Threads.set(0);
     return 0;
 }

@@ -45,7 +45,9 @@ struct TTEntry {
     Depth depth() const { return Depth(depth8 + DEPTH_OFFSET); }
     bool  is_pv() const { return bool(genBound8 & 0x4); }
     Bound bound() const { return Bound(genBound8 & 0x3); }
-    void  save(Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev);
+    void  save(Key k, Value v, bool pv, Bound b, Depth d, Move m, Value ev, uint8_t generation8);
+    // The returned age is a multiple of TranspositionTable::GENERATION_DELTA
+    uint8_t relative_age(const uint8_t generation8) const;
 
    private:
     friend class TranspositionTable;
@@ -53,7 +55,7 @@ struct TTEntry {
     uint16_t key16;
     uint8_t  depth8;
     uint8_t  genBound8;
-    uint16_t move16;
+    Move     move16;
     int16_t  value16;
     int16_t  eval16;
 };
@@ -76,34 +78,43 @@ class TranspositionTable {
     static_assert(sizeof(Cluster) == 32, "Unexpected Cluster size");
 
     // Constants used to refresh the hash table periodically
-    static constexpr unsigned GENERATION_BITS = 3;  // nb of bits reserved for other things
-    static constexpr int      GENERATION_DELTA =
-      (1 << GENERATION_BITS);  // increment for generation field
-    static constexpr int GENERATION_CYCLE = 255 + (1 << GENERATION_BITS);  // cycle length
-    static constexpr int GENERATION_MASK =
-      (0xFF << GENERATION_BITS) & 0xFF;  // mask to pull out generation number
+
+    // We have 8 bits available where the lowest 3 bits are
+    // reserved for other things.
+    static constexpr unsigned GENERATION_BITS = 3;
+    // increment for generation field
+    static constexpr int GENERATION_DELTA = (1 << GENERATION_BITS);
+    // cycle length
+    static constexpr int GENERATION_CYCLE = 255 + GENERATION_DELTA;
+    // mask to pull out generation number
+    static constexpr int GENERATION_MASK = (0xFF << GENERATION_BITS) & 0xFF;
 
    public:
     ~TranspositionTable() { aligned_large_pages_free(table); }
-    void new_search() { generation8 += GENERATION_DELTA; }  // Lower bits are used for other things
+
+    void new_search() {
+        // increment by delta to keep lower bits as is
+        generation8 += GENERATION_DELTA;
+    }
+
     TTEntry* probe(const Key key, bool& found) const;
     int      hashfull() const;
-    void     resize(size_t mbSize);
-    void     clear();
+    void     resize(size_t mbSize, int threadCount);
+    void     clear(size_t threadCount);
 
     TTEntry* first_entry(const Key key) const {
         return &table[mul_hi64(key, clusterCount)].entry[0];
     }
 
+    uint8_t generation() const { return generation8; }
+
    private:
     friend struct TTEntry;
 
     size_t   clusterCount;
-    Cluster* table;
-    uint8_t  generation8;  // Size must be not bigger than TTEntry::genBound8
+    Cluster* table       = nullptr;
+    uint8_t  generation8 = 0;  // Size must be not bigger than TTEntry::genBound8
 };
-
-extern TranspositionTable TT;
 
 }  // namespace Stockfish
 
