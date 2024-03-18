@@ -1,13 +1,13 @@
 /*
-  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
+  HypnoS, a UCI chess playing engine derived from Stockfish
   Copyright (C) 2004-2024 The Stockfish developers (see AUTHORS file)
 
-  Stockfish is free software: you can redistribute it and/or modify
+  HypnoS is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  Stockfish is distributed in the hope that it will be useful,
+  HypnoS is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -28,11 +28,14 @@
 #include "tune.h"
 #include "types.h"
 #include "uci.h"
+#include "experience.h"
+#include "book/book.h"
 
 using namespace Stockfish;
 
 int main(int argc, char* argv[]) {
 
+  Utility::init(argv[0]);
   SysInfo::init();
   show_logo();
 
@@ -54,12 +57,16 @@ int main(int argc, char* argv[]) {
   Tune::init();
   Bitboards::init();
   Position::init();
+  Experience::init();
   Threads.set(size_t(Options["Threads"]));
   Search::clear(); // After threads are up
   Eval::NNUE::init();
+  Book::init();
 
   UCI::loop(argc, argv);
 
-    Threads.set(0);
-    return 0;
+  Experience::unload();
+
+  Threads.set(0);
+  return 0;
 }

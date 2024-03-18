@@ -1,13 +1,13 @@
 /*
-  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
+  HypnoS, a UCI chess playing engine derived from Stockfish
   Copyright (C) 2004-2024 The Stockfish developers (see AUTHORS file)
 
-  Stockfish is free software: you can redistribute it and/or modify
+  HypnoS is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  Stockfish is distributed in the hope that it will be useful,
+  HypnoS is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -228,7 +228,7 @@ Value evaluate(const Position& pos, bool adjusted, int* complexity, bool psqtOnl
 
     // Give more value to positional evaluation when adjusted flag is set
     if (adjusted)
-        return static_cast<Value>(((1024 - delta) * psqt + (1024 + delta) * positional)
+        return static_cast<Value>(((1024 - delta + MaterialisticEvaluationStrategy) * psqt + (1024 + delta + PositionalEvaluationStrategy) * positional)
                                   / (1024 * OutputScale));
     else
         return static_cast<Value>((psqt + positional) / OutputScale);
