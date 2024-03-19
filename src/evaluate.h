@@ -30,7 +30,7 @@ class Position;
 
 namespace Eval {
 
-constexpr inline int SmallNetThreshold = 1200, PsqtOnlyThreshold = 2656;
+constexpr inline int SmallNetThreshold = 1050, PsqtOnlyThreshold = 2500;
 
 std::string trace(Position& pos);
 
@@ -40,7 +40,7 @@ Value evaluate(const Position& pos);
 // The default net name MUST follow the format nn-[SHA256 first 12 digits].nnue
 // for the build process (profile-build and fishtest) to work. Do not change the
 // name of the macro, as it is used in the Makefile.
-// #define EvalFileDefaultNameBig "nn-979b0339f40f.nnue"
+// #define EvalFileDefaultNameBig "nn-1ceb1ade0001.nnue"
 // #define EvalFileDefaultNameSmall "nn-baff1ede1f90.nnue"
 
 namespace NNUE {
