@@ -176,8 +176,11 @@ void NNUE::verify() {
 // the point of view of the given color. It can be divided by PawnValue to get
 // an approximation of the material advantage on the board in terms of pawns.
 int Eval::simple_eval(const Position& pos, Color c) {
-    return PawnValue * (pos.count<PAWN>(c) - pos.count<PAWN>(~c))
-         + (pos.non_pawn_material(c) - pos.non_pawn_material(~c));
+    return (   269 * (pos.count<PAWN>(c) - pos.count<PAWN>(~c))
+            +  896 * (pos.count<KNIGHT>(c) - pos.count<KNIGHT>(~c))
+            +  994 * (pos.count<BISHOP>(c) - pos.count<BISHOP>(~c))
+            + 1472 * (pos.count<ROOK>(c) - pos.count<ROOK>(~c))
+            + 1657 * (pos.count<QUEEN>(c) - pos.count<QUEEN>(~c)));
 }
 
 
