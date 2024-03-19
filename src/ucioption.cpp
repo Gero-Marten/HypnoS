@@ -80,7 +80,7 @@ void init(OptionsMap& o) {
     o["Ponder"]                              << Option(false);
     o["MultiPV"]                             << Option(1, 1, 500);
     o["Skill Level"]                         << Option(20, 0, 20);
-    o["MoveOverhead"]                        << Option(10, 0, 5000);
+    o["Move Overhead"]                       << Option(10, 0, 5000);
     o["Minimum Thinking Time"]               << Option(100, 0, 5000);
 	o["nodestime"]                           << Option(0, 0, 10000);
     o["UCI_Chess960"]                        << Option(false);
@@ -99,7 +99,7 @@ void init(OptionsMap& o) {
     o["SyzygyProbeDepth"]                    << Option(1, 1, 100);
     o["Syzygy50MoveRule"]                    << Option(true);
     o["SyzygyProbeLimit"]                    << Option(7, 0, 7);
-    o["Experience Enabled"]                  << Option(false, on_exp_enabled);
+    o["Experience Enabled"]                  << Option(true, on_exp_enabled);
     o["Experience File"]                     << Option("Hypnos.exp", on_exp_file);
     o["Experience Readonly"]                 << Option(false);
     o["Experience Book"]                     << Option(false);

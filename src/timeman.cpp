@@ -43,7 +43,7 @@ void TimeManagement::init(Search::LimitsType& limits, Color us, int ply) {
         return;
     }
     TimePoint minThinkingTime = TimePoint(Options["Minimum Thinking Time"]);
-    TimePoint moveOverhead = TimePoint(Options["MoveOverhead"]);
+    TimePoint moveOverhead = TimePoint(Options["Move Overhead"]);
     TimePoint npmsec       = TimePoint(Options["nodestime"]);
 
     // optScale is a percentage of available time to use for the current move.
