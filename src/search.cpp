@@ -844,7 +844,7 @@ Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, boo
          }
         }
 
-        ss->currentMove         = Move::null();
+        ss->currentMove         = MOVE_NULL;
         ss->continuationHistory = &thisThread->continuationHistory[0][0][NO_PIECE][0];
 
         pos.do_null_move(st);
