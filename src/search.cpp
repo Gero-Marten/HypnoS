@@ -617,6 +617,7 @@ Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, boo
     ss->multipleExtensions                      = (ss - 1)->multipleExtensions;
     Square prevSq = is_ok((ss - 1)->currentMove) ? to_sq((ss - 1)->currentMove) : SQ_NONE;
     ss->statScore = 0;
+	ss->kingMoves=0;
 
     // Step 4. Transposition table lookup.
     excludedMove = ss->excludedMove;
@@ -820,15 +821,35 @@ Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, boo
     {
         assert(eval - beta >= 0);
 
-        // Null move dynamic reduction based on depth and eval
-        Depth R = std::min(int(eval - beta) / 151, 6) + depth / 3 + 4;
+        // Null move depth based on depth and eval
+        Depth nmDepth = 2 * depth / 3 - std::min(int(eval - beta) / 151, 6) - 4;
+        if (abs(beta) < 160 && pos.non_pawn_material(us) <= 2 * BishopValue && nmDepth < (thisThread->rootDepth - ss->ply) / 3)
+        {
+         const Square   ksq    = pos.square<KING>(us);
+         Bitboard b = attacks_bb<KING>(ksq) & ~pos.pieces(us);
+         int kingMoves = popcount(b);
+         if (kingMoves < 3)
+            while (b)
+                if (pos.attackers_to(pop_lsb(b), pos.pieces() ^ ksq) & pos.pieces(~us))
+                  kingMoves--;
+         if (!kingMoves)
+         {
+            b = pos.pieces(~us, PAWN);
+            while (b)
+            if (!(pawn_waytoPromotion(~us, pop_lsb(b)) & pos.pieces(us)))
+            {
+               nmDepth = (thisThread->rootDepth - ss->ply) / 3;
+               break;
+            }
+         }
+        }
 
-        ss->currentMove         = MOVE_NULL;
+        ss->currentMove         = Move::null();
         ss->continuationHistory = &thisThread->continuationHistory[0][0][NO_PIECE][0];
 
         pos.do_null_move(st);
 
-        Value nullValue = -search<NonPV>(pos, ss + 1, -beta, -beta + 1, depth - R, !cutNode);
+        Value nullValue = -search<NonPV>(pos, ss + 1, -beta, -beta + 1, nmDepth, !cutNode);
 
         pos.undo_null_move();
 
@@ -842,9 +863,9 @@ Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, boo
 
             // Do verification search at high depths, with null move pruning disabled
             // until ply exceeds nmpMinPly.
-            thisThread->nmpMinPly = ss->ply + 3 * (depth - R) / 4;
+            thisThread->nmpMinPly = ss->ply + 3 * nmDepth / 4;
 
-            Value v = search<NonPV>(pos, ss, beta - 1, beta, depth - R, false);
+            Value v = search<NonPV>(pos, ss, beta - 1, beta, nmDepth, false);
 
             thisThread->nmpMinPly = 0;
 
@@ -981,6 +1002,7 @@ moves_loop:  // When in check, search starts here
         capture    = pos.capture_stage(move);
         movedPiece = pos.moved_piece(move);
         givesCheck = pos.gives_check(move);
+        ss->kingMoves += type_of(movedPiece) == KING;
 
         // Calculate new depth for this move
         newDepth = depth - 1;
