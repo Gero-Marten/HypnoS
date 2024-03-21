@@ -1079,7 +1079,7 @@ moves_loop:  // When in check, search starts here
                     extension = 1;
 
                     // We make sure to limit the extensions in some way to avoid a search explosion
-                    if (!PvNode && ss->multipleExtensions <= 16)
+                    if (!PvNode && ss->multipleExtensions <= 20)
                     {
                         extension = 2 + (value < singularBeta - 78 && !ttCapture);
                         depth += depth < 14;
@@ -1167,7 +1167,7 @@ moves_loop:  // When in check, search starts here
 
         // Set reduction to 0 for first picked move (ttMove) (~2 Elo)
         // Nullifies all previous reduction adjustments to ttMove and leaves only history to do them
-        else if (move == ttMove)
+        else if (move == ttMove && extension <= 0)
             r = 0;
 
         ss->statScore = 2 * thisThread->mainHistory[us][from_to(move)]
@@ -1219,8 +1219,13 @@ moves_loop:  // When in check, search starts here
             if (!ttMove)
                 r += 2;
 
+            int adjExt = std::max(0, extension);
+
+            bool red = r > (3 + adjExt);
+            bool ext = r < (-7 + adjExt);
+
             // Note that if expected reduction is high, we reduce search depth by 1 here (~9 Elo)
-            value = -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, newDepth - (r > 3), !cutNode);
+            value = -search<NonPV>(pos, ss + 1, -(alpha + 1), -alpha, newDepth + ext - red, !cutNode);
         }
 
         // For PV nodes only, do a full PV search on the first move or after a fail high,
