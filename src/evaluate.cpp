@@ -193,8 +193,6 @@ Value Eval::evaluate(const Position& pos) {
     int  nnueComplexity;
     int  v;
 
-    int nnueComplexity;
-
     Value nnue = smallNet ? NNUE::evaluate<NNUE::Small>(pos, true, &nnueComplexity, psqtOnly)
                           : NNUE::evaluate<NNUE::Big>(pos, true, &nnueComplexity, false);
 
