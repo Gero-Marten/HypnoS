@@ -28,11 +28,14 @@
 #include "tune.h"
 #include "types.h"
 #include "uci.h"
+#include "experience.h"
+#include "book/book.h"
 
 using namespace Stockfish;
 
 int main(int argc, char* argv[]) {
 
+  Utility::init(argv[0]);
   SysInfo::init();
   show_logo();
 
@@ -54,12 +57,16 @@ int main(int argc, char* argv[]) {
   Tune::init();
   Bitboards::init();
   Position::init();
+  Experience::init();
   Threads.set(size_t(Options["Threads"]));
   Search::clear(); // After threads are up
   Eval::NNUE::init();
+  Book::init();
 
   UCI::loop(argc, argv);
 
-    Threads.set(0);
-    return 0;
+  Experience::unload();
+
+  Threads.set(0);
+  return 0;
 }
