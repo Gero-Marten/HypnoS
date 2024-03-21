@@ -38,24 +38,29 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-# ifeq ($(target_windows),yes)
-# 	EXE = stockfish.exe
-# else
-# 	EXE = stockfish
-# endif
+ifeq ($(target_windows),yes)
+ 	EXE = hypnos.exe
+ else
+ 	EXE = hypnos
+ endif
 
 ### Installation dir definitions
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
 ### Built-in benchmark for pgo-builds
-PGOBENCH = $(WINE_PATH) ./$(EXE) bench
+ifeq ($(SDE_PATH),)
+	PGOBENCH = $(WINE_PATH) ./$(EXE) bench
+else
+	PGOBENCH = $(SDE_PATH) -icx -- $(WINE_PATH) ./$(EXE) bench
+endif
 
 ### Source and object files
-SRCS = benchmark.cpp bitboard.cpp evaluate.cpp main.cpp \
+SRCS = benchmark.cpp bitboard.cpp evaluate.cpp experience.cpp main.cpp \
 	misc.cpp movegen.cpp movepick.cpp position.cpp \
 	search.cpp thread.cpp timeman.cpp tt.cpp uci.cpp ucioption.cpp tune.cpp syzygy/tbprobe.cpp \
-	nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp
+	nnue/evaluate_nnue.cpp nnue/features/half_ka_v2_hm.cpp \
+	book/book.cpp book/polyglot/polyglot.cpp book/ctg/ctg.cpp
 
 HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h \
 		nnue/evaluate_nnue.h nnue/features/half_ka_v2_hm.h nnue/layers/affine_transform.h \
@@ -63,11 +68,12 @@ HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h \
 		nnue/layers/sqr_clipped_relu.h nnue/nnue_accumulator.h nnue/nnue_architecture.h \
 		nnue/nnue_common.h nnue/nnue_feature_transformer.h position.h \
 		search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
-		tt.h tune.h types.h uci.h
+		tt.h tune.h types.h uci.h \
+		book/book.h book/ctg/ctg.h book/polyglot/polyglot.h
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
-VPATH = syzygy:nnue:nnue/features
+VPATH = syzygy:nnue:nnue/features:book:book/polyglot:book/ctg
 
 ### ==========================================================================
 ### Section 2. High-level Configuration
@@ -787,15 +793,9 @@ endif
 ### Section 4. Public Targets
 ### ==========================================================================
 
-CXXFLAGS += -DEvalFileDefaultNameBig=\"$(EVALFILE)\"
-CXXFLAGS += -DEvalFileDefaultNameSmall=\"nn-baff1ede1f90.nnue\"
-
-build: config-sanity
-	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
-
 help:
 	@echo ""
-	@echo "To compile stockfish, type: "
+	@echo "To compile Hypnos, type: "
 	@echo ""
 	@echo "make -j target [ARCH=arch] [COMP=compiler] [COMPCXX=cxx]"
 	@echo ""
@@ -875,14 +875,16 @@ endif
 analyze: net config-sanity objclean
 	$(MAKE) -k ARCH=$(ARCH) COMP=$(COMP) $(OBJS)
 
+build: net config-sanity
+	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
+
 profile-build: net config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 1/4. Building instrumented executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
 	@echo ""
 	@echo "Step 2/4. Running benchmark for pgo-build ..."
-	$(PGOBENCH) > PGOBENCH.out 2>&1
-	tail -n 4 PGOBENCH.out
+	$(PGOBENCH)
 	@echo ""
 	@echo "Step 3/4. Building optimized executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) objclean
@@ -905,16 +907,16 @@ clean: objclean profileclean
 
 # clean binaries and objects
 objclean:
-	@rm -f stockfish stockfish.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o
+	@rm -f hypnos hypnos.exe *.o ./syzygy/*.o ./nnue/*.o ./nnue/features/*.o ./book/*.o ./book/polyglot/*.o ./book/ctg/*.o
 
 # clean auxiliary profiling files
 profileclean:
 	@rm -rf profdir
-	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./nnue/*.gcda ./nnue/features/*.gcda *.s PGOBENCH.out
-	@rm -f stockfish.profdata *.profraw
-	@rm -f stockfish.*args*
-	@rm -f stockfish.*lt*
-	@rm -f stockfish.res
+	@rm -f bench.txt *.gcda *.gcno ./syzygy/*.gcda ./nnue/*.gcda ./nnue/features/*.gcda ./book/*.gcda ./book/polyglot/*.gcda ./book/ctg/*.gcda *.s PGOBENCH.out
+	@rm -f hypnos.profdata *.profraw
+	@rm -f hypnos.*args*
+	@rm -f hypnos.*lt*
+	@rm -f hypnos.res
 	@rm -f ./-lstdc++.res
 
 define fetch_network
@@ -984,7 +986,7 @@ default:
 
 all: $(EXE) .depend
 
-config-sanity:
+config-sanity: net
 	@echo ""
 	@echo "Config:"
 	@echo "debug: '$(debug)'"
@@ -1056,9 +1058,9 @@ clang-profile-make:
 	all
 
 clang-profile-use:
-	$(XCRUN) llvm-profdata merge -output=stockfish.profdata *.profraw
+	$(XCRUN) llvm-profdata merge -output=hypnos.profdata *.profraw
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-instr-use=stockfish.profdata' \
+	EXTRACXXFLAGS='-fprofile-instr-use=hypnos.profdata' \
 	EXTRALDFLAGS='-fprofile-use ' \
 	all
 
@@ -1084,9 +1086,9 @@ icx-profile-make:
 	all
 
 icx-profile-use:
-	$(XCRUN) llvm-profdata merge -output=stockfish.profdata *.profraw
+	$(XCRUN) llvm-profdata merge -output=hypnos.profdata *.profraw
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) \
-	EXTRACXXFLAGS='-fprofile-instr-use=stockfish.profdata' \
+	EXTRACXXFLAGS='-fprofile-instr-use=hypnos.profdata' \
 	EXTRALDFLAGS='-fprofile-use ' \
 	all
 
