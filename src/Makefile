@@ -38,22 +38,18 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-ifeq ($(target_windows),yes)
- 	EXE = hypnos.exe
- else
- 	EXE = hypnos
- endif
+# ifeq ($(target_windows),yes)
+# 	EXE = hypnos.exe
+# else
+# 	EXE = hypnos
+# endif
 
 ### Installation dir definitions
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/bin
 
 ### Built-in benchmark for pgo-builds
-ifeq ($(SDE_PATH),)
-	PGOBENCH = $(WINE_PATH) ./$(EXE) bench
-else
-	PGOBENCH = $(SDE_PATH) -icx -- $(WINE_PATH) ./$(EXE) bench
-endif
+PGOBENCH = $(WINE_PATH) ./$(EXE) bench
 
 ### Source and object files
 SRCS = benchmark.cpp bitboard.cpp evaluate.cpp experience.cpp main.cpp \
@@ -793,6 +789,12 @@ endif
 ### Section 4. Public Targets
 ### ==========================================================================
 
+CXXFLAGS += -DEvalFileDefaultNameBig=\"$(EVALFILE)\"
+CXXFLAGS += -DEvalFileDefaultNameSmall=\"nn-baff1ede1f90.nnue\"
+
+build: config-sanity
+	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
+
 help:
 	@echo ""
 	@echo "To compile Hypnos, type: "
@@ -875,16 +877,14 @@ endif
 analyze: net config-sanity objclean
 	$(MAKE) -k ARCH=$(ARCH) COMP=$(COMP) $(OBJS)
 
-build: net config-sanity
-	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
-
 profile-build: net config-sanity objclean profileclean
 	@echo ""
 	@echo "Step 1/4. Building instrumented executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) $(profile_make)
 	@echo ""
 	@echo "Step 2/4. Running benchmark for pgo-build ..."
-	$(PGOBENCH)
+	$(PGOBENCH) > PGOBENCH.out 2>&1
+	tail -n 4 PGOBENCH.out
 	@echo ""
 	@echo "Step 3/4. Building optimized executable ..."
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) objclean
@@ -986,7 +986,7 @@ default:
 
 all: $(EXE) .depend
 
-config-sanity: net
+config-sanity:
 	@echo ""
 	@echo "Config:"
 	@echo "debug: '$(debug)'"
