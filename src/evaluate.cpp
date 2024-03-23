@@ -189,43 +189,47 @@ Value Eval::evaluate(const Position& pos) {
 
     assert(!pos.checkers());
 
-    int  simpleEval = simple_eval(pos, pos.side_to_move());
-    bool smallNet   = std::abs(simpleEval) > SmallNetThreshold;
-    bool psqtOnly   = std::abs(simpleEval) > PsqtOnlyThreshold;
-    int  nnueComplexity;
-    int  v;
+    int simpleEval = simple_eval(pos, pos.side_to_move());
+    bool smallNet = std::abs(simpleEval) > SmallNetThreshold;
+    bool psqtOnly = std::abs(simpleEval) > PsqtOnlyThreshold;
+    int nnueComplexity;
 
     Value nnue = smallNet ? NNUE::evaluate<NNUE::Small>(pos, true, &nnueComplexity, psqtOnly)
                           : NNUE::evaluate<NNUE::Big>(pos, true, &nnueComplexity, false);
 
-        int optimism = pos.this_thread()->optimism[pos.side_to_move()];
+    int optimism = pos.this_thread()->optimism[pos.side_to_move()];
 
     const auto adjustEval = [&](int optDiv, int nnueDiv, int pawnCountConstant, int pawnCountMul,
                                 int npmConstant, int evalDiv, int shufflingConstant,
-                                int shufflingDiv) {
-        // Blend optimism and eval with nnue complexity and material imbalance
-        optimism += optimism * (nnueComplexity + std::abs(simpleEval - nnue)) / optDiv;
-        nnue -= nnue * (nnueComplexity + std::abs(simpleEval - nnue)) / nnueDiv;
+                                int shufflingDiv) -> int {
+        int absDiff = std::abs(simpleEval - nnue);
+        optimism += optimism * (nnueComplexity + absDiff) / optDiv;
+        nnue -= nnue * (nnueComplexity + absDiff) / nnueDiv;
 
         int npm = pos.non_pawn_material() / 64;
-        v       = (nnue * (npm + pawnCountConstant + pawnCountMul * pos.count<PAWN>())
-             + optimism * (npmConstant + npm))
-          / evalDiv;
-
-        // Damp down the evaluation linearly when shuffling
-        int shuffling = pos.rule50_count();
-        v             = v * (shufflingConstant - shuffling) / shufflingDiv;
+        return (nnue * (npm + pawnCountConstant + pawnCountMul * pos.count<PAWN>()) +
+                optimism * (npmConstant + npm))
+               / evalDiv;
     };
 
-    if (!smallNet)
-        adjustEval(513, 32395, 919, 11, 145, 1036, 178, 204);
-    else if (psqtOnly)
-        adjustEval(517, 32857, 908, 7, 155, 1019, 224, 238);
-    else
-        adjustEval(499, 32793, 903, 9, 147, 1067, 208, 211);
+    const int optDiv = smallNet ? 517 : 499;
+    const int nnueDiv = smallNet ? 32857 : 32793;
+    const int pawnCountConstant = smallNet ? 908 : 903;
+    const int pawnCountMul = smallNet ? 7 : 9;
+    const int npmConstant = smallNet ? 155 : 147;
+    const int evalDiv = smallNet ? 1019 : 1067;
+    const int shufflingConstant = smallNet ? 224 : 208;
+    const int shufflingDiv = smallNet ? 238 : 211;
+
+    int v = adjustEval(optDiv, nnueDiv, pawnCountConstant, pawnCountMul,
+                       npmConstant, evalDiv, shufflingConstant, shufflingDiv);
+
+    // Damp down the evaluation linearly when shuffling
+    int shuffling = pos.rule50_count();
+    v = v * (shufflingConstant - shuffling) / shufflingDiv;
 
     // Guarantee evaluation does not hit the tablebase range
-    v = std::clamp(int(v), VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
+    v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
 
     return v;
 }
@@ -236,33 +240,34 @@ Value Eval::evaluate(const Position& pos) {
 // Trace scores are from white's point of view
 std::string Eval::trace(Position& pos) {
 
-    if (pos.checkers())
-        return "Final evaluation: none (in check)";
+     // Check if the position is in check
+     if (pos.checkers())
+         return "Final evaluation: none (in check)";
 
-    // Reset any global variable used in eval
-    pos.this_thread()->bestValue       = VALUE_ZERO;
-    pos.this_thread()->rootSimpleEval  = VALUE_ZERO;
-    pos.this_thread()->optimism[WHITE] = VALUE_ZERO;
-    pos.this_thread()->optimism[BLACK] = VALUE_ZERO;
+     // Initialize a stringstream to build the trace string
+     std::stringstream ss;
+     ss << std::fixed << std::setprecision(2);
 
-    std::stringstream ss;
-    ss << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2);
-    ss << '\n' << NNUE::trace(pos) << '\n';
+     // Add detailed trace of NNUE evaluation
+     ss << '\n' << NNUE::trace(pos) << '\n';
 
-    ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
+     // Set the formatting for printing values
+     ss << std::setw(15);
 
-    Value v;
-    v = NNUE::evaluate<NNUE::Big>(pos, false);
-    v = pos.side_to_move() == WHITE ? v : -v;
-    ss << "NNUE evaluation        " << 0.01 * UCI::to_cp(v) << " (white side)\n";
+     // Calculate the NNUE rating from white's perspective
+     Value nnueEval = NNUE::evaluate<NNUE::Big>(pos, false);
+     nnueEval = pos.side_to_move() == WHITE ? nnueEval : -nnueEval;
+     ss << "NNUE evaluation " << 0.01 * UCI::to_cp(nnueEval) << " (white side)\n";
 
-    v = evaluate(pos);
-    v = pos.side_to_move() == WHITE ? v : -v;
-    ss << "Final evaluation       " << 0.01 * UCI::to_cp(v) << " (white side)";
-    ss << " [with scaled NNUE, ...]";
-    ss << "\n";
+     // Calculates the final rating from white's perspective and adds a note on the NNUE scale
+     Value finalEval = evaluate(pos);
+     finalEval = pos.side_to_move() == WHITE ? finalEval : -finalEval;
+     ss << "Final evaluation " << 0.01 * UCI::to_cp(finalEval) << " (white side)";
+     ss << " [with scaled NNUE, ...]";
+     ss << "\n";
 
-    return ss.str();
+     // Returns the trace string
+     return ss.str();
 }
 
 }  // namespace Stockfish
