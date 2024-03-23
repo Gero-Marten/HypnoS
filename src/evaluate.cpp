@@ -222,9 +222,11 @@ Value Eval::evaluate(const Position& pos) {
     int v = adjustEval(optDiv, nnueDiv, pawnCountConstant, pawnCountMul,
                        npmConstant, evalDiv, shufflingConstant, shufflingDiv);
 
+    // Damp down the evaluation linearly when shuffling
     int shuffling = pos.rule50_count();
     v = v * (shufflingConstant - shuffling) / shufflingDiv;
 
+    // Guarantee evaluation does not hit the tablebase range
     v = std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
 
     return v;
@@ -236,33 +238,34 @@ Value Eval::evaluate(const Position& pos) {
 // Trace scores are from white's point of view
 std::string Eval::trace(Position& pos) {
 
-    if (pos.checkers())
-        return "Final evaluation: none (in check)";
+     // Check if the position is in check
+     if (pos.checkers())
+         return "Final evaluation: none (in check)";
 
-    // Reset any global variable used in eval
-    pos.this_thread()->bestValue       = VALUE_ZERO;
-    pos.this_thread()->rootSimpleEval  = VALUE_ZERO;
-    pos.this_thread()->optimism[WHITE] = VALUE_ZERO;
-    pos.this_thread()->optimism[BLACK] = VALUE_ZERO;
+     // Initialize a stringstream to build the trace string
+     std::stringstream ss;
+     ss << std::fixed << std::setprecision(2);
 
-    std::stringstream ss;
-    ss << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2);
-    ss << '\n' << NNUE::trace(pos) << '\n';
+     // Add detailed trace of NNUE evaluation
+     ss << '\n' << NNUE::trace(pos) << '\n';
 
-    ss << std::showpoint << std::showpos << std::fixed << std::setprecision(2) << std::setw(15);
+     // Set the formatting for printing values
+     ss << std::setw(15);
 
-    Value v;
-    v = NNUE::evaluate<NNUE::Big>(pos, false);
-    v = pos.side_to_move() == WHITE ? v : -v;
-    ss << "NNUE evaluation        " << 0.01 * UCI::to_cp(v) << " (white side)\n";
+     // Calculate the NNUE rating from white's perspective
+     Value nnueEval = NNUE::evaluate<NNUE::Big>(pos, false);
+     nnueEval = pos.side_to_move() == WHITE ? nnueEval : -nnueEval;
+     ss << "NNUE evaluation " << 0.01 * UCI::to_cp(nnueEval) << " (white side)\n";
 
-    v = evaluate(pos);
-    v = pos.side_to_move() == WHITE ? v : -v;
-    ss << "Final evaluation       " << 0.01 * UCI::to_cp(v) << " (white side)";
-    ss << " [with scaled NNUE, ...]";
-    ss << "\n";
+     // Calculates the final rating from white's perspective and adds a note on the NNUE scale
+     Value finalEval = evaluate(pos);
+     finalEval = pos.side_to_move() == WHITE ? finalEval : -finalEval;
+     ss << "Final evaluation " << 0.01 * UCI::to_cp(finalEval) << " (white side)";
+     ss << " [with scaled NNUE, ...]";
+     ss << "\n";
 
-    return ss.str();
+     // Returns the trace string
+     return ss.str();
 }
 
 }  // namespace Stockfish
