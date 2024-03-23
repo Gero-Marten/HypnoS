@@ -38,11 +38,11 @@ else ifeq ($(COMP),mingw)
 endif
 
 ### Executable name
-# ifeq ($(target_windows),yes)
-# 	EXE = stockfish.exe
-# else
-# 	EXE = stockfish
-# endif
+ifeq ($(target_windows),yes)
+	EXE = stockfish.exe
+else
+	EXE = stockfish
+endif
 
 ### Installation dir definitions
 PREFIX = /usr/local
@@ -63,7 +63,7 @@ HEADERS = benchmark.h bitboard.h evaluate.h misc.h movegen.h movepick.h \
 		nnue/layers/sqr_clipped_relu.h nnue/nnue_accumulator.h nnue/nnue_architecture.h \
 		nnue/nnue_common.h nnue/nnue_feature_transformer.h position.h \
 		search.h syzygy/tbprobe.h thread.h thread_win32_osx.h timeman.h \
-		tt.h tune.h types.h uci.h ucioption.h perft.h nnue/network.cpp
+		tt.h tune.h types.h uci.h ucioption.h perft.h nnue/network.h
 
 OBJS = $(notdir $(SRCS:.cpp=.o))
 
@@ -795,12 +795,6 @@ endif
 ### Section 4. Public Targets
 ### ==========================================================================
 
-CXXFLAGS += -DEvalFileDefaultNameBig=\"$(EVALFILE)\"
-CXXFLAGS += -DEvalFileDefaultNameSmall=\"nn-baff1ede1f90.nnue\"
-
-build: config-sanity
-	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
-
 help:
 	@echo ""
 	@echo "To compile stockfish, type: "
@@ -882,6 +876,9 @@ endif
 
 analyze: net config-sanity objclean
 	$(MAKE) -k ARCH=$(ARCH) COMP=$(COMP) $(OBJS)
+
+build: net config-sanity
+	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
 
 profile-build: net config-sanity objclean profileclean
 	@echo ""
@@ -992,7 +989,7 @@ default:
 
 all: $(EXE) .depend
 
-config-sanity:
+config-sanity: net
 	@echo ""
 	@echo "Config:"
 	@echo "debug: '$(debug)'"
