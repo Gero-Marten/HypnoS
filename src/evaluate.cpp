@@ -191,41 +191,40 @@ Value Eval::evaluate(const Position& pos) {
     bool smallNet   = std::abs(simpleEval) > SmallNetThreshold;
     bool psqtOnly   = std::abs(simpleEval) > PsqtOnlyThreshold;
     int  nnueComplexity;
-    int  v;
-
     Value nnue = smallNet ? NNUE::evaluate<NNUE::Small>(pos, true, &nnueComplexity, psqtOnly)
                           : NNUE::evaluate<NNUE::Big>(pos, true, &nnueComplexity, false);
 
-        int optimism = pos.this_thread()->optimism[pos.side_to_move()];
+    int optimism = pos.this_thread()->optimism[pos.side_to_move()];
 
-    const auto adjustEval = [&](int optDiv, int nnueDiv, int pawnCountConstant, int pawnCountMul,
-                                int npmConstant, int evalDiv, int shufflingConstant,
-                                int shufflingDiv) {
-        // Blend optimism and eval with nnue complexity and material imbalance
-        optimism += optimism * (nnueComplexity + std::abs(simpleEval - nnue)) / optDiv;
-        nnue -= nnue * (nnueComplexity + std::abs(simpleEval - nnue)) / nnueDiv;
+    // Defines the adjustment parameters based on the type of neural network used
+    const int optDiv = smallNet ? 517 : 499;
+    const int nnueDiv = smallNet ? 32857 : 32793;
+    const int pawnCountConstant = smallNet ? 908 : 903;
+    const int pawnCountMul = smallNet ? 7 : 9;
+    const int npmConstant = smallNet ? 155 : 147;
+    const int evalDiv = smallNet ? 1019 : 1067;
+    const int shufflingConstant = smallNet ? 224 : 208;
+    const int shufflingDiv = smallNet ? 238 : 211;
 
-        int npm = pos.non_pawn_material() / 64;
-        v       = (nnue * (npm + pawnCountConstant + pawnCountMul * pos.count<PAWN>())
-             + optimism * (npmConstant + npm))
-          / evalDiv;
+    // Calculate the absolute difference between the simple evaluation and the neural network evaluation
+    int absDiff = std::abs(simpleEval - nnue);
 
-        // Damp down the evaluation linearly when shuffling
-        int shuffling = pos.rule50_count();
-        v             = v * (shufflingConstant - shuffling) / shufflingDiv;
-    };
+    // Adjust the optimism and rating of the neural network based on the complexity of the network and the difference
+    optimism += optimism * (nnueComplexity + absDiff) / optDiv;
+    nnue -= nnue * (nnueComplexity + absDiff) / nnueDiv;
 
-    if (!smallNet)
-        adjustEval(513, 32395, 919, 11, 145, 1036, 178, 204);
-    else if (psqtOnly)
-        adjustEval(517, 32857, 908, 7, 155, 1019, 224, 238);
-    else
-        adjustEval(499, 32793, 903, 9, 147, 1067, 208, 211);
+    int npm = pos.non_pawn_material() / 64;
+
+    Value v = (nnue * (npm + pawnCountConstant + pawnCountMul * pos.count<PAWN>()) +
+               optimism * (npmConstant + npm))
+              / evalDiv;
+
+    // Damp down the evaluation linearly when shuffling
+    int shuffling = pos.rule50_count();
+    v = v * (shufflingConstant - shuffling) / shufflingDiv;
 
     // Guarantee evaluation does not hit the tablebase range
-    v = std::clamp(int(v), VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
-
-    return v;
+    return std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
 }
 
 // Like evaluate(), but instead of returning a value, it returns
