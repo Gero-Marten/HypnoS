@@ -60,12 +60,13 @@ const unsigned int         gEmbeddedNNUESmallSize    = 1;
 
 namespace Stockfish {
 
+bool has_fianchettoed_bishops(const Position& pos, Color c);
+
 namespace Eval {
 
 std::unordered_map<NNUE::NetSize, EvalFile> EvalFiles = {
   {NNUE::Big, {"EvalFile", EvalFileDefaultNameBig, "None"}},
   {NNUE::Small, {"EvalFileSmall", EvalFileDefaultNameSmall, "None"}}};
-
 
 // Tries to load a NNUE network at startup time, or when the engine
 // receives a UCI command "setoption name EvalFile value nn-[a-z0-9]{12}.nnue"
@@ -180,6 +181,16 @@ int Eval::simple_eval(const Position& pos, Color c) {
          + (pos.non_pawn_material(c) - pos.non_pawn_material(~c));
 }
 
+// Function to check if there are two flanked bishops for a given color
+bool has_fianchettoed_bishops(const Position& pos, Color c) {
+    Square left_bishop_square = (c == WHITE) ? SQ_C1 : SQ_C8;
+    Square right_bishop_square = (c == WHITE) ? SQ_F1 : SQ_F8;
+
+    return pos.count<BISHOP>(c) >= 2 && pos.piece_on(left_bishop_square) == make_piece(c, BISHOP) && pos.piece_on(right_bishop_square) == make_piece(c, BISHOP);
+}
+
+// Declaration of the function prototype
+int evaluate_bishop_bishop_pair(const Position& pos);
 
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
@@ -191,6 +202,7 @@ Value Eval::evaluate(const Position& pos) {
     bool smallNet   = std::abs(simpleEval) > SmallNetThreshold;
     bool psqtOnly   = std::abs(simpleEval) > PsqtOnlyThreshold;
     int  nnueComplexity;
+
     Value nnue = smallNet ? NNUE::evaluate<NNUE::Small>(pos, true, &nnueComplexity, psqtOnly)
                           : NNUE::evaluate<NNUE::Big>(pos, true, &nnueComplexity, false);
 
@@ -223,8 +235,30 @@ Value Eval::evaluate(const Position& pos) {
     int shuffling = pos.rule50_count();
     v = v * (shufflingConstant - shuffling) / shufflingDiv;
 
+    // Add the evaluation of the pair of flanked bishops
+    v += evaluate_bishop_bishop_pair(pos);
+
     // Guarantee evaluation does not hit the tablebase range
     return std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
+}
+
+    // Function to evaluate the presence of the pair of flanked bishops
+    int evaluate_bishop_bishop_pair(const Position& pos) {
+    constexpr int BishopPairBonus = 50;
+
+    int score = 0;
+
+    // Check if white has the flanked bishop pair
+    if (has_fianchettoed_bishops(pos, WHITE)) {
+        score += BishopPairBonus;
+    }
+
+    // Check if black has the flanked bishop pair
+    if (has_fianchettoed_bishops(pos, BLACK)) {
+        score -= BishopPairBonus;
+    }
+
+    return score;
 }
 
 // Like evaluate(), but instead of returning a value, it returns
