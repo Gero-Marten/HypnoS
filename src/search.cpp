@@ -502,15 +502,12 @@ void Thread::search() {
             fallingEval = std::clamp(fallingEval, 0.51, 1.51);
 
             // If the bestMove is stable over several iterations, reduce time accordingly
-            timeReduction    = lastBestMoveDepth + 8 < completedDepth ? 1.495 : 0.687;
-            double reduction = (1.48 + mainThread->previousTimeReduction) / (2.17 * timeReduction);
-            double bestMoveInstability = 1 + 1.88 * totBestMoveChanges / threads.size();
-            int    el                  = std::clamp((bestValue + 750) / 150, 0, 9);
+            timeReduction    = lastBestMoveDepth + 8 < completedDepth ? 1.56 : 0.69;
+            double reduction = (1.4 + mainThread->previousTimeReduction) / (2.17 * timeReduction);
+            double bestMoveInstability = 1 + 1.79 * totBestMoveChanges / Threads.size();
+			int    el                  = std::clamp((bestValue + 750) / 150, 0, 9);
 
-            double totalTime =
-              mainThread->Time.optimum() * fallingEval * reduction * bestMoveInstability;
-            double totalTime = mainThread->Time.optimum() * fallingEval * reduction
-                             * bestMoveInstability * EvalLevel[el];
+			double totalTime = Time.optimum() * fallingEval * reduction * bestMoveInstability * EvalLevel[el];
 
             // Cap used time in case of a single legal move for a better viewer experience
             if (rootMoves.size() == 1)
@@ -840,7 +837,6 @@ Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, boo
         assert(eval - beta >= 0);
 
         // Null move dynamic reduction based on depth and eval
-}
         Depth R = std::min(int(eval - beta) / 144, 6) + depth / 3 + 4;
 
         ss->currentMove         = MOVE_NULL;
