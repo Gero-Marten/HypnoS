@@ -75,6 +75,9 @@ enum NodeType {
     Root
 };
 
+static constexpr double EvalLevel[10] = {1.043, 1.017, 0.952, 1.009, 0.971,
+                                         1.002, 0.992, 0.947, 1.046, 1.001};
+
 // Futility margin
 Value futility_margin(Depth d, bool noTtCutNode, bool improving, bool oppWorsening) {
     Value futilityMult       = 118 - 44 * noTtCutNode;
@@ -498,12 +501,15 @@ void Thread::search() {
                                / 616.6;
             fallingEval = std::clamp(fallingEval, 0.51, 1.51);
 
-            // If the bestMove is stable over several iterations, reduce time accordingly
-            timeReduction    = lastBestMoveDepth + 8 < completedDepth ? 1.56 : 0.69;
-            double reduction = (1.4 + mainThread->previousTimeReduction) / (2.17 * timeReduction);
-            double bestMoveInstability = 1 + 1.79 * totBestMoveChanges / Threads.size();
+            timeReduction    = lastBestMoveDepth + 8 < completedDepth ? 1.495 : 0.687;
+            double reduction = (1.48 + mainThread->previousTimeReduction) / (2.17 * timeReduction);
+            double bestMoveInstability = 1 + 1.88 * totBestMoveChanges / threads.size();
+            int    el                  = std::clamp((bestValue + 750) / 150, 0, 9);
 
-            double totalTime = Time.optimum() * fallingEval * reduction * bestMoveInstability;
+            double totalTime =
+              mainThread->Time.optimum() * fallingEval * reduction * bestMoveInstability;
+            double totalTime = mainThread->Time.optimum() * fallingEval * reduction
+                             * bestMoveInstability * EvalLevel[el];
 
             // Cap used time in case of a single legal move for a better viewer experience
             if (rootMoves.size() == 1)
