@@ -1,13 +1,13 @@
 /*
-  HypnoS, a UCI chess playing engine derived from Stockfish
+  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
   Copyright (C) 2004-2024 The Stockfish developers (see AUTHORS file)
 
-  HypnoS is free software: you can redistribute it and/or modify
+  Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  HypnoS is distributed in the hope that it will be useful,
+  Stockfish is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -163,9 +163,9 @@ public:
 
 } // namespace
 
-/// engine_info() returns the full name of the current HypnoS version. This
-/// will be either "HypnoS <Tag> DD-MM-YY" (where DD-MM-YY is the date when
-/// the program was compiled) or "HypnoS <Version>", depending on whether
+/// engine_info() returns the full name of the current Stockfish version. This
+/// will be either "Stockfish <Tag> DD-MM-YY" (where DD-MM-YY is the date when
+/// the program was compiled) or "Stockfish <Version>", depending on whether
 /// Version is empty.
 
 string engine_info(bool to_uci) {
@@ -173,7 +173,7 @@ string engine_info(bool to_uci) {
   string month, day, year;
   stringstream ss, date(__DATE__); // From compiler, format is "Sep 21 2008"
 
-  ss << "HypnoS " << Version << setfill('0');
+  ss << "Stockfish " << Version << setfill('0');
 
   if (Version.empty())
   {
@@ -1310,7 +1310,7 @@ namespace WinProcGroup {
 
 #ifndef _WIN32
 
-void bindThisThread(size_t) {}
+void bind_this_thread(size_t) {}
 
 #else
 
@@ -1386,9 +1386,9 @@ static int best_node(size_t idx) {
 }
 
 
-/// bindThisThread() set the group affinity of the current thread
+/// bind_this_thread() set the group affinity of the current thread
 
-void bindThisThread(size_t idx) {
+void bind_this_thread(size_t idx) {
 
   // Use only local variables to be thread-safe
   int node = best_node(idx);
