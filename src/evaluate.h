@@ -41,8 +41,8 @@ bool has_fianchettoed_bishops(const Position& pos, Color c);
 // The default net name MUST follow the format nn-[SHA256 first 12 digits].nnue
 // for the build process (profile-build and fishtest) to work. Do not change the
 // name of the macro, as it is used in the Makefile.
-#define EvalFileDefaultNameBig "nn-1ceb1ade0001.nnue"
-#define EvalFileDefaultNameSmall "nn-baff1ede1f90.nnue"
+// #define EvalFileDefaultNameBig "nn-1ceb1ade0001.nnue"
+// #define EvalFileDefaultNameSmall "nn-baff1ede1f90.nnue"
 
 namespace NNUE {
 
