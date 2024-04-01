@@ -1,13 +1,13 @@
 /*
-  Stockfish, a UCI chess playing engine derived from Glaurung 2.1
+  HypnoS, a UCI chess playing engine derived from Stockfish
   Copyright (C) 2004-2024 The Stockfish developers (see AUTHORS file)
 
-  Stockfish is free software: you can redistribute it and/or modify
+  HypnoS is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
 
-  Stockfish is distributed in the hope that it will be useful,
+  HypnoS is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
@@ -59,8 +59,6 @@ const unsigned int         gEmbeddedNNUESmallSize    = 1;
 
 
 namespace Stockfish {
-
-bool has_fianchettoed_bishops(const Position& pos, Color c);
 
 namespace Eval {
 
@@ -182,16 +180,6 @@ int Eval::simple_eval(const Position& pos, Color c) {
          + (pos.non_pawn_material(c) - pos.non_pawn_material(~c));
 }
 
-// Function to check if there are two flanked bishops for a given color
-bool has_fianchettoed_bishops(const Position& pos, Color c) {
-    Square left_bishop_square = (c == WHITE) ? SQ_C1 : SQ_C8;
-    Square right_bishop_square = (c == WHITE) ? SQ_F1 : SQ_F8;
-
-    return pos.count<BISHOP>(c) >= 2 && pos.piece_on(left_bishop_square) == make_piece(c, BISHOP) && pos.piece_on(right_bishop_square) == make_piece(c, BISHOP);
-}
-
-// Declaration of the function prototype
-int evaluate_bishop_bishop_pair(const Position& pos);
 
 // Evaluate is the evaluator for the outer world. It returns a static evaluation
 // of the position from the point of view of the side to move.
@@ -202,64 +190,33 @@ Value Eval::evaluate(const Position& pos) {
     int  simpleEval = simple_eval(pos, pos.side_to_move());
     bool smallNet   = std::abs(simpleEval) > SmallNetThreshold;
     bool psqtOnly   = std::abs(simpleEval) > PsqtOnlyThreshold;
-    int  nnueComplexity;
+
+    int nnueComplexity;
 
     Value nnue = smallNet ? NNUE::evaluate<NNUE::Small>(pos, true, &nnueComplexity, psqtOnly)
                           : NNUE::evaluate<NNUE::Big>(pos, true, &nnueComplexity, false);
 
     int optimism = pos.this_thread()->optimism[pos.side_to_move()];
 
-    // Defines the adjustment parameters based on the type of neural network used
-    const int optDiv = smallNet ? 517 : 499;
-    const int nnueDiv = smallNet ? 32857 : 32793;
-    const int pawnCountConstant = smallNet ? 908 : 903;
-    const int pawnCountMul = smallNet ? 7 : 9;
-    const int npmConstant = smallNet ? 155 : 147;
-    const int evalDiv = smallNet ? 1019 : 1067;
-    const int shufflingConstant = smallNet ? 224 : 208;
-    const int shufflingDiv = smallNet ? 238 : 211;
+    if (smallNet && (nnue * simpleEval < 0 || std::abs(nnue) < 50))
+        nnue = NNUE::evaluate<NNUE::Big>(pos, true, &nnueComplexity, false);
 
-    // Calculate the absolute difference between the simple evaluation and the neural network evaluation
-    int absDiff = std::abs(simpleEval - nnue);
 
-    // Adjust the optimism and rating of the neural network based on the complexity of the network and the difference
-    optimism += optimism * (nnueComplexity + absDiff) / optDiv;
-    nnue -= nnue * (nnueComplexity + absDiff) / nnueDiv;
+    // Blend optimism and eval with nnue complexity and material imbalance
+    optimism += optimism * (nnueComplexity + std::abs(simpleEval - nnue)) / 524;
+    nnue -= nnue * (nnueComplexity + std::abs(simpleEval - nnue)) / 31950;
 
     int npm = pos.non_pawn_material() / 64;
-
-    Value v = (nnue * (npm + pawnCountConstant + pawnCountMul * pos.count<PAWN>()) +
-               optimism * (npmConstant + npm))
-              / evalDiv;
+    int v   = (nnue * (927 + npm + 9 * pos.count<PAWN>()) + optimism * (159 + npm)) / 1000;
 
     // Damp down the evaluation linearly when shuffling
     int shuffling = pos.rule50_count();
-    v = v * (shufflingConstant - shuffling) / shufflingDiv;
-
-    // Add the evaluation of the pair of flanked bishops
-    v += evaluate_bishop_bishop_pair(pos);
+    v             = v * (195 - shuffling) / 228;
 
     // Guarantee evaluation does not hit the tablebase range
-    return std::clamp(v, VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
-}
+    v = std::clamp(int(v), VALUE_TB_LOSS_IN_MAX_PLY + 1, VALUE_TB_WIN_IN_MAX_PLY - 1);
 
-    // Function to evaluate the presence of the pair of flanked bishops
-    int evaluate_bishop_bishop_pair(const Position& pos) {
-    constexpr int BishopPairBonus = 50;
-
-    int score = 0;
-
-    // Check if white has the flanked bishop pair
-    if (has_fianchettoed_bishops(pos, WHITE)) {
-        score += BishopPairBonus;
-    }
-
-    // Check if black has the flanked bishop pair
-    if (has_fianchettoed_bishops(pos, BLACK)) {
-        score -= BishopPairBonus;
-    }
-
-    return score;
+    return v;
 }
 
 // Like evaluate(), but instead of returning a value, it returns
