@@ -119,17 +119,6 @@ Value value_draw(const Thread* thisThread) {
     return VALUE_DRAW - 1 + Value(thisThread->nodes & 0x2);
 }
 
-// Random generators
-std::random_device& get_random_device() {
-    static std::random_device rd;
-    return rd;
-}
-
-std::mt19937& get_random_generator() {
-    static std::mt19937 gen(get_random_device()());
-    return gen;
-}
-
 // Skill structure is used to implement strength limit. If we have a UCI_Elo,
 // we convert it to an appropriate skill level, anchored to the Stash engine.
 // This method is based on a fit of the Elo results for games played between
@@ -1911,16 +1900,19 @@ Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth) {
 
     if (variety)
     {
-        const auto normalizedVariety = variety * UCI::NormalizeToPawnValue / 100;
 
-        if (bestValue + normalizedVariety >= 0 && pos.game_ply() / 2 < Options["Variety Max Moves"])
+        if (bestValue + variety * UCI::NormalizeToPawnValue / 100 >= 0
+            && pos.game_ply() / 2 < Options["Variety Max Moves"])
         {
             // Range for variety bonus
-            const auto varietyMinRange = thisThread->nodes / 2;
-            const auto varietyMaxRange = thisThread->nodes * 2;
-            // Distribution for variety bonus
-            std::uniform_int_distribution<int> distribution(varietyMinRange, varietyMaxRange);
-            bestValue += distribution(get_random_generator()) % (variety + 1);
+            const auto  varietyMinRange = thisThread->nodes / 2;
+            const auto  varietyMaxRange = thisThread->nodes * 2;
+
+            static PRNG rng(now());
+            bestValue +=
+              static_cast<Value>(rng.rand<std::uint64_t>() % (varietyMaxRange - varietyMinRange + 1)
+                                 + varietyMinRange)
+              % (variety + 1);
         }
     }
 
