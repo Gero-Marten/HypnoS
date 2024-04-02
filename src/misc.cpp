@@ -1310,7 +1310,7 @@ namespace WinProcGroup {
 
 #ifndef _WIN32
 
-void bindThisThread(size_t) {}
+void bind_this_thread(size_t) {}
 
 #else
 
@@ -1386,9 +1386,9 @@ static int best_node(size_t idx) {
 }
 
 
-/// bindThisThread() set the group affinity of the current thread
+/// bind_this_thread() set the group affinity of the current thread
 
-void bindThisThread(size_t idx) {
+void bind_this_thread(size_t idx) {
 
   // Use only local variables to be thread-safe
   int node = best_node(idx);
