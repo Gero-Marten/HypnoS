@@ -198,7 +198,7 @@ Value Eval::evaluate(const Position& pos) {
     Value nnue = smallNet ? NNUE::evaluate<NNUE::Small>(pos, true, &nnueComplexity, psqtOnly)
                           : NNUE::evaluate<NNUE::Big>(pos, true, &nnueComplexity, false);
 
-        int optimism = pos.this_thread()->optimism[pos.side_to_move()];
+    int optimism = pos.this_thread()->optimism[pos.side_to_move()];
 
     const auto adjustEval = [&](int optDiv, int nnueDiv, int pawnCountConstant, int pawnCountMul,
                                 int npmConstant, int evalDiv, int shufflingConstant,
