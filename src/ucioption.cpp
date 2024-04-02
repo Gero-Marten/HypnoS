@@ -27,7 +27,9 @@
 #include <sstream>
 #include <string>
 
+#include "book/book.h"
 #include "evaluate.h"
+#include "experience.h"
 #include "misc.h"
 #include "search.h"
 #include "syzygy/tbprobe.h"
@@ -49,8 +51,14 @@ static void on_clear_hash(const Option&) { Search::clear(); }
 static void on_hash_size(const Option& o) { TT.resize(size_t(o)); }
 static void on_logger(const Option& o) { start_logger(o); }
 static void on_threads(const Option& o) { Threads.set(size_t(o)); }
+static void on_book1(const Option& o) { Book::on_book(0, (string) o); }
+static void on_book2(const Option& o) { Book::on_book(1, (string) o); }
 static void on_tb_path(const Option& o) { Tablebases::init(o); }
+static void on_exp_enabled(const Option& /*o*/) { Experience::init(); }
+static void on_exp_file(const Option& /*o*/) { Experience::init(); }
 static void on_eval_file(const Option&) { Eval::NNUE::init(); }
+static void on_materialistic_evaluation_strategy(const Option& o) { Eval::NNUE::MaterialisticEvaluationStrategy = 10 * (int)o; }
+static void on_positional_evaluation_strategy(const Option& o) { Eval::NNUE::PositionalEvaluationStrategy = 10 * (int)o; }
 
 // Our case insensitive less() function as required by UCI protocol
 bool CaseInsensitiveLess::operator()(const string& s1, const string& s2) const {
@@ -73,17 +81,38 @@ void init(OptionsMap& o) {
     o["MultiPV"]                             << Option(1, 1, 500);
     o["Skill Level"]                         << Option(20, 0, 20);
     o["MoveOverhead"]                        << Option(10, 0, 5000);
+    o["Minimum Thinking Time"]               << Option(100, 0, 5000);
 	o["nodestime"]                           << Option(0, 0, 10000);
     o["UCI_Chess960"]                        << Option(false);
     o["UCI_LimitStrength"]                   << Option(false);
     o["UCI_Elo"]                             << Option(1320, 1320, 3190);
     o["UCI_ShowWDL"]                         << Option(false);
+    o["Book 1 File"]                         << Option("<empty>", on_book1);
+    o["Book 1 Width"]                        << Option(1, 1, 20);
+    o["Book 1 Depth"]                        << Option(255, 1, 255);
+	o["(CTG) Book 1 Only Green"]             << Option(true);
+    o["Book 2 File"]                         << Option("<empty>", on_book2);
+    o["Book 2 Width"]                        << Option(1, 1, 20);
+    o["Book 2 Depth"]                        << Option(255, 1, 255);
+	o["(CTG) Book 2 Only Green"]             << Option(true);
     o["SyzygyPath"]                          << Option("<empty>", on_tb_path);
     o["SyzygyProbeDepth"]                    << Option(1, 1, 100);
     o["Syzygy50MoveRule"]                    << Option(true);
     o["SyzygyProbeLimit"]                    << Option(7, 0, 7);
+    o["Experience Enabled"]                  << Option(false, on_exp_enabled);
+    o["Experience File"]                     << Option("Hypnos.exp", on_exp_file);
+    o["Experience Readonly"]                 << Option(false);
+    o["Experience Book"]                     << Option(false);
+    o["Experience Book Width"]               << Option(1, 1, 20);
+    o["Experience Book Eval Importance"]     << Option(5, 0, 10);
+    o["Experience Book Min Depth"]           << Option(27, EXP_MIN_DEPTH, 64);
+    o["Experience Book Max Moves"]           << Option(100, 1, 100);
     o["EvalFile"]                            << Option(EvalFileDefaultNameBig, on_eval_file);
     o["EvalFileSmall"]                       << Option(EvalFileDefaultNameSmall, on_eval_file);
+    o["Variety"]                             << Option(0, 0, 40);
+    o["Variety Max Moves"]                   << Option(0, 0, 255);
+    o["Materialistic Evaluation Strategy"]   << Option(0, -12, 12, on_materialistic_evaluation_strategy);
+    o["Positional Evaluation Strategy"]      << Option(0, -12, 12, on_positional_evaluation_strategy);
 }
 
 

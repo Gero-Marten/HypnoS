@@ -66,6 +66,8 @@ std::unordered_map<NNUE::NetSize, EvalFile> EvalFiles = {
   {NNUE::Big, {"EvalFile", EvalFileDefaultNameBig, "None"}},
   {NNUE::Small, {"EvalFileSmall", EvalFileDefaultNameSmall, "None"}}};
 
+int NNUE::MaterialisticEvaluationStrategy = 0;
+int NNUE::PositionalEvaluationStrategy = 0;
 
 // Tries to load a NNUE network at startup time, or when the engine
 // receives a UCI command "setoption name EvalFile value nn-[a-z0-9]{12}.nnue"

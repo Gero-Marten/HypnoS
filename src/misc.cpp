@@ -182,7 +182,7 @@ string engine_info(bool to_uci) {
   }
 
   ss << (to_uci  ? "\nid author ": " by ")
-     << "M.Z, Stockfish developers (see AUTHORS file)";
+     << "M.Z and Stockfish developers (see AUTHORS file)";
          ss << "\n"
          << compiler_info()
          << "\nBuild date/time       : " << year << '-' << setw(2) << setfill('0') << month << '-' << setw(2) << setfill('0') << day << ' ' << __TIME__
@@ -1483,10 +1483,189 @@ void init([[maybe_unused]] int argc, char* argv[]) {
     // pattern replacement: "./" at the start of path is replaced by the working directory
     if (binaryDirectory.find("." + pathSeparator) == 0)
         binaryDirectory.replace(0, 1, workingDirectory);
+
+    binaryDirectory = Utility::fix_path(binaryDirectory);
+    workingDirectory = Utility::fix_path(workingDirectory);
+
 }
 
 
 } // namespace CommandLine
 
+namespace Utility
+{
+    string myFolder;
+
+    void init(const char* arg0)
+    {
+        string s = arg0;
+        size_t i = s.find_last_of(DirectorySeparator);
+        if (i != string::npos)
+            myFolder = s.substr(0, i);
+    }
+
+    bool file_exists(const string& filename)
+    {
+        struct stat info;
+        if (stat(filename.c_str(), &info) == 0)
+            return (info.st_mode & S_IFREG) == S_IFREG;
+
+        return false;
+    }
+
+    bool is_game_decided(const Position& pos, Value lastScore)
+    {
+        //Assume game is decided if game ply is above 200
+        if (pos.game_ply() > 200)
+            return true;
+
+        //Assume game is decided if |last score| is above 2.5 Pawn
+        if (lastScore != VALUE_NONE && std::abs(lastScore) > PawnValue * 5 / 2)
+            return true;
+
+        //Assume game is decided if |last score| is below 0.25 Pawn and game ply is above 120
+        if (pos.game_ply() > 120 && lastScore < PawnValue / 4)
+            return true;
+
+        //Assume game is decided if remaining pieces is less than 9
+        if (pos.count<ALL_PIECES>() < 9)
+            return true;
+
+        //Assume game is not decided!
+        return false;
+    }
+
+    string unquote(const string& s)
+    {
+        string s1 = s;
+
+        if (s1.size() > 2)
+        {
+            if ((s1.front() == '\"' && s1.back() == '\"') || (s1.front() == '\'' && s1.back() == '\''))
+            {
+                s1 = s1.substr(1, s1.size() - 2);
+            }
+        }
+
+        return s1;
+    }
+
+    bool is_empty_filename(const string &fn)
+    {
+        if (fn.empty())
+            return true;
+
+        static string Empty = EMPTY;
+        return equal(
+            fn.begin(), fn.end(),
+            Empty.begin(), Empty.end(),
+            [](char a, char b) { return tolower(a) == tolower(b); });
+    }
+
+    string fix_path(const string& p)
+    {
+        if (is_empty_filename(p))
+            return p;
+
+        string p1 = unquote(p);
+        replace(p1.begin(), p1.end(), ReverseDirectorySeparator, DirectorySeparator);
+
+        return p1;
+    }
+
+    string combine_path(const string& p1, const string& p2)
+    {
+        //We don't expect the first part of the path to be empty!
+        assert(is_empty_filename(p1) == false);
+
+        if (is_empty_filename(p2))
+            return p2;
+
+        string p;
+        if (p1.back() == DirectorySeparator || p1.back() == ReverseDirectorySeparator)
+            p = p1 + p2;
+        else
+            p = p1 + DirectorySeparator + p2;
+
+        return fix_path(p);
+    }
+
+    string map_path(const string& p)
+    {
+        if (is_empty_filename(p))
+            return p;
+
+        string p2 = fix_path(p);
+
+        //Make sure we can map this path
+        if (p2.find(DirectorySeparator) == string::npos)
+            p2 = combine_path(CommandLine::binaryDirectory, p);
+
+        return p2;
+    }
+
+    size_t get_file_size(const string& f)
+    {
+        if(is_empty_filename(f))
+            return (size_t)-1;
+
+        ifstream in(map_path(f), ifstream::ate | ifstream::binary);
+        if (!in.is_open())
+            return (size_t)-1;
+
+        return (size_t)in.tellg();
+    }
+
+    bool is_same_file(const string& f1, const string& f2)
+    {
+        return map_path(f1) == map_path(f2);
+    }
+
+    string format_bytes(uint64_t bytes, int decimals)
+    {
+        static const uint64_t KB = 1024;
+        static const uint64_t MB = KB * 1024;
+        static const uint64_t GB = MB * 1024;
+        static const uint64_t TB = GB * 1024;
+
+        stringstream ss;
+
+        if (bytes < KB)
+            ss << bytes << " B";
+        else if (bytes < MB)
+            ss << fixed << setprecision(decimals) << ((double)bytes / KB) << "KB";
+        else if (bytes < GB)
+            ss << fixed << setprecision(decimals) << ((double)bytes / MB) << "MB";
+        else if (bytes < TB)
+            ss << fixed << setprecision(decimals) << ((double)bytes / GB) << "GB";
+        else
+            ss << fixed << setprecision(decimals) << ((double)bytes / TB) << "TB";
+
+        return ss.str();
+    }
+
+    //Code is an `edited` version of: https://stackoverflow.com/a/49812018
+    string format_string(const char* const fmt, ...)
+    {
+        //Initialize use of the variable arguments
+        va_list vaArgs;
+        va_start(vaArgs, fmt);
+
+        //Acquire the required string size
+        va_start(vaArgs, fmt);
+        int len = vsnprintf(nullptr, 0, fmt, vaArgs);
+        va_end(vaArgs);
+
+        
+        //Allocate enough buffer and format
+        vector<char> v(len + 1);
+        
+        va_start(vaArgs, fmt);
+        vsnprintf(v.data(), v.size(), fmt, vaArgs);
+        va_end(vaArgs);
+
+        return string(v.data(), len);
+    }
+} // namespace Utility
 
 } // namespace Stockfish

@@ -27,12 +27,15 @@
 #include <cstring>
 #include <initializer_list>
 #include <iostream>
+#include <random>
 #include <sstream>
 #include <string>
 #include <utility>
 
 #include "bitboard.h"
+#include "book/book.h"
 #include "evaluate.h"
+#include "experience.h"
 #include "misc.h"
 #include "movegen.h"
 #include "movepick.h"
@@ -116,6 +119,17 @@ Value value_draw(const Thread* thisThread) {
     return VALUE_DRAW - 1 + Value(thisThread->nodes & 0x2);
 }
 
+// Random generators
+std::random_device& get_random_device() {
+    static std::random_device rd;
+    return rd;
+}
+
+std::mt19937& get_random_generator() {
+    static std::mt19937 gen(get_random_device()());
+    return gen;
+}
+
 // Skill structure is used to implement strength limit. If we have a UCI_Elo,
 // we convert it to an appropriate skill level, anchored to the Stash engine.
 // This method is based on a fit of the Elo results for games played between
@@ -139,6 +153,8 @@ struct Skill {
     double level;
     Move   best = MOVE_NONE;
 };
+
+int variety;
 
 template<NodeType nodeType>
 Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool cutNode);
@@ -211,6 +227,9 @@ void Search::clear() {
     TT.clear();
     Threads.clear();
     Tablebases::init(Options["SyzygyPath"]);  // Free mapped files
+
+    Experience::save();
+    Experience::resume_learning();
 }
 
 
@@ -225,11 +244,17 @@ void MainThread::search() {
         return;
     }
 
+    //Make sure experience has finished loading
+    Experience::wait_for_loading_finished();
+
     Color us = rootPos.side_to_move();
     Time.init(Limits, us, rootPos.game_ply());
     TT.new_search();
 
     Eval::NNUE::verify();
+    variety = Options["Variety"];
+
+  bool think = true;
 
     if (rootMoves.empty())
     {
@@ -239,9 +264,106 @@ void MainThread::search() {
     }
     else
     {
-        Threads.start_searching();  // start non-main threads
-        Thread::search();           // main thread start searching
-    }
+      if (!(Limits.infinite || Limits.mate || Limits.depth || Limits.nodes || Limits.perft) && !ponder)
+      {
+          //Probe the configured books
+          Move bookMove = Book::probe(rootPos);
+
+            // Check experience book
+			   
+            if (bookMove == MOVE_NONE && (bool) Options["Experience Book"]
+                && rootPos.game_ply() / 2 < (int) Options["Experience Book Max Moves"]
+                && Experience::enabled())
+            {
+                Depth expBookMinDepth             = (Depth) Options["Experience Book Min Depth"];
+                int   experienceBookWidth         = (int) Options["Experience Book Width"];
+                const Experience::ExpEntryEx* exp = Experience::probe(rootPos.key());
+
+                if (exp)
+                {
+                    int evalImportance = (int) Options["Experience Book Eval Importance"];
+                    vector<pair<const Experience::ExpEntryEx*, int>> quality;
+                    const Experience::ExpEntryEx*                    temp = exp;
+                    while (temp)
+                    {
+                        if (temp->depth >= (uint8_t) expBookMinDepth)
+                        {
+                            pair<int, bool> q = temp->quality(rootPos, evalImportance);
+                            if (q.first > 0 && !q.second)
+                                quality.emplace_back(temp, q.first);
+                        }
+
+                        temp = temp->next;
+                    }
+
+                    // Sort experience moves based on quality
+                    stable_sort(quality.begin(), quality.end(),
+                                [](const pair<const Experience::ExpEntryEx*, int>& a,
+                                   const pair<const Experience::ExpEntryEx*, int>& b) {
+                                    return a.second > b.second;
+                                });
+
+                    if (!quality.empty())
+                    {
+                        // Sort experience moves based on quality
+                        stable_sort(quality.begin(), quality.end(),
+                                    [](const pair<const Experience::ExpEntryEx*, int>& a,
+                                       const pair<const Experience::ExpEntryEx*, int>& b) {
+                                        return a.second > b.second;
+                                    });
+
+                        // Provide some info to the GUI about available experience moves
+                        int expCount = 0;
+                        for (auto it = quality.rbegin(); it != quality.rend(); ++it)
+                        {
+                            ++expCount;
+                            sync_cout
+                              << "info "
+                              << " depth " << (Depth) it->first->depth << " seldepth "
+                              << (Depth) it->first->depth << " multipv 1"
+                              << " score " << UCI::value(it->first->value) << " nodes " << expCount
+                              << " nps " << expCount << " tbhits " << expCount << " time 0"
+                              << " pv " << UCI::move((Move) it->first->move, rootPos.is_chess960())
+                              << sync_endl;
+                        }
+
+                        // Calculate the selected width
+                        int selectedWidth =
+                          std::min(experienceBookWidth, static_cast<int>(quality.size()));
+
+                        // Apply 'Best Move'
+                        if (experienceBookWidth > 1)
+                        {
+                            static PRNG rng(now());
+
+                            // Randomly pick one move from the top 'width' moves
+                            bookMove =
+                              (Move) quality[rng.rand<uint32_t>() % selectedWidth].first->move;
+                        }
+                        else
+                        {
+                            bookMove = (Move) quality.front().first->move;
+                        }
+                    }
+                }
+            }
+
+            if (bookMove != MOVE_NONE
+                && std::find(rootMoves.begin(), rootMoves.end(), bookMove) != rootMoves.end())
+            {
+                think = false;
+
+                for (Thread* th : Threads)
+                  std::swap(th->rootMoves[0], *std::find(th->rootMoves.begin(), th->rootMoves.end(), bookMove));
+          }
+      }
+
+      if (think)
+      {
+          Threads.start_searching(); // start non-main threads
+          Thread::search();          // main thread start searching
+      }
+  }
 
     // When we reach the maximum depth, we can arrive here without a raise of
     // Threads.stop. However, if we are pondering or in an infinite search,
@@ -271,6 +393,71 @@ void MainThread::search() {
     if (int(Options["MultiPV"]) == 1 && !Limits.depth && !Limits.mate && !skill.enabled()
         && rootMoves[0].pv[0] != MOVE_NONE)
         bestThread = Threads.get_best_thread();
+
+  if (    think
+      && !Experience::is_learning_paused()
+      && !bestThread->rootPos.is_chess960()
+      && !(bool)Options["Experience Readonly"]
+	  && !(bool)Options["UCI_LimitStrength"]
+	  &&  bestThread->completedDepth >= EXP_MIN_DEPTH)
+  {
+      //Add best move
+      Experience::add_pv_experience(bestThread->rootPos.key(), bestThread->rootMoves[0].pv[0], bestThread->rootMoves[0].score, bestThread->completedDepth);
+																	 
+
+      //Add moves from other threads
+      struct UniqueMoveInfo
+      {
+          Move move;
+          Depth depth;
+          Value scoreSum;
+          int count;
+      };
+
+      std::map<Move, UniqueMoveInfo> uniqueMoves;
+      for (Thread* th : Threads)
+      {
+          //Skip 'bestMove' becasue it was already added it
+          if (th->rootMoves[0].pv[0] == bestThread->rootMoves[0].pv[0])
+              continue;
+
+          UniqueMoveInfo thisMove{ th->rootMoves[0].pv[0], th->completedDepth, th->rootMoves[0].score, 1 };
+          std::map<Move, UniqueMoveInfo>::iterator existingMove = uniqueMoves.find(thisMove.move);
+          if (existingMove == uniqueMoves.end())
+          {
+              uniqueMoves[thisMove.move] = thisMove;
+              continue;
+          }
+
+          //Is 'thisMove' better than 'existingMove'?
+          if (thisMove.depth > existingMove->second.depth)
+          {
+              uniqueMoves[thisMove.move] = thisMove;
+          }
+          else if (thisMove.depth == existingMove->second.depth)
+          {
+              uniqueMoves[thisMove.move].scoreSum += thisMove.scoreSum;
+              uniqueMoves[thisMove.move].count++;
+          }
+      }
+
+      //Add to MultiPV exp
+      for (const std::pair<Move, UniqueMoveInfo> mv : uniqueMoves)
+      {
+          Experience::add_multipv_experience(
+              rootPos.key(),
+              mv.second.move,
+              mv.second.scoreSum / mv.second.count,
+              mv.second.depth);
+      }
+
+      //Save experience if game is decided
+      if (Utility::is_game_decided(rootPos, bestThread->rootMoves[0].score))
+      {
+          Experience::save();
+          Experience::pause_learning();
+      }
+  }
 
     bestPreviousScore        = bestThread->rootMoves[0].score;
     bestPreviousAverageScore = bestThread->rootMoves[0].averageScore;
@@ -636,6 +823,72 @@ Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, boo
     // to save indentation, we list the condition in all code between here and there.
     if (!excludedMove)
         ss->ttPv = PvNode || (ss->ttHit && tte->is_pv());
+
+    //Probe experience data
+    const Experience::ExpEntryEx *expEx = excludedMove == MOVE_NONE && Experience::enabled() ? Experience::probe(pos.key()) : nullptr;
+    const Experience::ExpEntryEx* tempExp = expEx;
+    const Experience::ExpEntryEx* bestExp = nullptr;
+
+    //Update update quiet stats, continuation histories, and main history from experience data
+    int expCount = 0;
+    while (tempExp)
+    {
+        if (tempExp->depth >= depth)
+        {
+            ++expCount;
+
+            //Got better experience entry than TT entry?
+            if (!bestExp && (!ss->ttHit || tempExp->depth > tte->depth()))
+            {
+                bestExp = tempExp;
+
+                ss->ttHit = true;
+                ttMove = bestExp->move;
+                ttValue = value_from_tt(bestExp->value, ss->ply, pos.rule50_count());
+                ss->ttPv = true;
+
+                //Save to TT using 'posKey'
+                tte->save(posKey,
+                    ttValue,
+                    ss->ttPv,
+                    ttValue >= beta ? BOUND_LOWER : BOUND_EXACT,
+                    bestExp->depth,
+                    ttMove,
+                    VALUE_NONE);
+
+                //Nothing else to do if PV node
+                if (PvNode)
+                    break;
+            }
+
+            if (!PvNode)
+            {
+                Value expValue = value_from_tt(tempExp->value, ss->ply, pos.rule50_count());
+                if (expValue >= beta)
+                {
+                    if (!pos.capture(tempExp->move))
+                        update_quiet_stats(pos, ss, tempExp->move, stat_bonus(tempExp->depth));
+
+                    // Extra penalty for early quiet moves of the previous ply
+                    if (prevSq != SQ_NONE && (ss-1)->moveCount <= 2 && !priorCapture)
+                        update_continuation_histories(ss-1, pos.piece_on(prevSq), prevSq, -stat_bonus(tempExp->depth + 1));
+                }
+                // Penalty for a quiet tempExp->move() that fails low
+                else if (!pos.capture(tempExp->move))
+                {
+                    int penalty = -stat_bonus(tempExp->depth);
+                    thisThread->mainHistory[us][from_to(tempExp->move)] << penalty;
+                    update_continuation_histories(ss, pos.moved_piece(tempExp->move), to_sq(tempExp->move), penalty);
+                }
+            }
+        }
+
+        tempExp = tempExp->next;
+    }
+
+    //Increment tbHits
+    if (expCount)
+        thisThread->tbHits.fetch_add(expCount, std::memory_order_relaxed);
 
     // At non-PV nodes we check for an early TT cutoff
     if (!PvNode && !excludedMove && tte->depth() > depth
@@ -1653,6 +1906,21 @@ Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth) {
                 else
                     break;  // Fail high
             }
+        }
+    }
+
+    if (variety)
+    {
+        const auto normalizedVariety = variety * UCI::NormalizeToPawnValue / 100;
+
+        if (bestValue + normalizedVariety >= 0 && pos.game_ply() / 2 < Options["Variety Max Moves"])
+        {
+            // Range for variety bonus
+            const auto varietyMinRange = thisThread->nodes / 2;
+            const auto varietyMaxRange = thisThread->nodes * 2;
+            // Distribution for variety bonus
+            std::uniform_int_distribution<int> distribution(varietyMinRange, varietyMaxRange);
+            bestValue += distribution(get_random_generator()) % (variety + 1);
         }
     }
 

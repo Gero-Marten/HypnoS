@@ -47,6 +47,9 @@ namespace NNUE {
 
 enum NetSize : int;
 
+extern int MaterialisticEvaluationStrategy;
+extern int PositionalEvaluationStrategy;
+
 void init();
 void verify();
 
