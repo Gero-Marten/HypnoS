@@ -884,7 +884,7 @@ Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, boo
                 update_quiet_stats(pos, ss, ttMove, stat_bonus(depth));
 
             // Extra penalty for early quiet moves of
-            // the previous ply (~0 Elo on STC, ~2 Elo on LTC).
+            // the previous ply (~1 Elo on STC, ~2 Elo on LTC)
             if (prevSq != SQ_NONE && (ss - 1)->moveCount <= 2 && !priorCapture)
                 update_continuation_histories(ss - 1, pos.piece_on(prevSq), prevSq,
                                               -stat_malus(depth + 1));
@@ -954,8 +954,6 @@ Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, boo
     CapturePieceToHistory& captureHistory = thisThread->captureHistory;
 
     Value unadjustedStaticEval = VALUE_NONE;
-
-    // Step 6. Static evaluation of the position
     if (ss->inCheck)
     {
         // Skip early pruning when in check
