@@ -1062,7 +1062,7 @@ Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, boo
         ss->currentMove         = MOVE_NULL;
         ss->continuationHistory = &thisThread->continuationHistory[0][0][NO_PIECE][0];
 
-        pos.do_null_move(st, tt);
+        pos.do_null_move(st);
 
         Value nullValue = -search<NonPV>(pos, ss + 1, -beta, -beta + 1, depth - R, !cutNode);
 
