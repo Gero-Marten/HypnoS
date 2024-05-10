@@ -145,7 +145,7 @@ struct Skill {
 
 int variety;
 
-template<NodeType nodeType>
+template <NodeType nodeType>
 Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, bool cutNode);
 
 template<NodeType nodeType>
@@ -781,7 +781,11 @@ Value search(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth, boo
             return alpha;
     }
     else
+    {
         thisThread->rootDelta = beta - alpha;
+        if (thisThread->pvIdx > 0 && depth > 3)
+            depth -= 2;
+    }
 
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
 
