@@ -1898,6 +1898,9 @@ Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth) {
         }
     }
 
+    if(std::abs(bestValue)==VALUE_INFINITE){
+       variety=0;
+    }
     if (variety)
     {
 
