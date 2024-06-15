@@ -790,7 +790,7 @@ endif
 ### ==========================================================================
 
 CXXFLAGS += -DEvalFileDefaultNameBig=\"$(EVALFILE)\"
-CXXFLAGS += -DEvalFileDefaultNameSmall=\"nn-baff1ede1f90.nnue\"
+CXXFLAGS += -DEvalFileDefaultNameSmall=\"nn-37f18f62d772.nnue\"
 
 build: config-sanity
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
