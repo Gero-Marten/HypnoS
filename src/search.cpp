@@ -1837,7 +1837,7 @@ Value qsearch(Position& pos, Stack* ss, Value alpha, Value beta, Depth depth) {
 
                 // If static exchange evaluation is much worse than what is needed to not
                 // fall below alpha we can prune this move.
-                if (futilityBase > alpha && !pos.see_ge(move, (alpha - futilityBase) * 4))
+                if (futilityBase > alpha && !pos.see_ge(move, (alpha - futilityBase) * 2 - 20))
                 {
                     bestValue = alpha;
                     continue;
