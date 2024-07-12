@@ -52,54 +52,31 @@ The following is a list of options supported by HypnoS (on top of all UCI option
     Same explanation as **(CTG) Book 1 Only Green**, but for the second book
 
   * #### Self-Learning
-	Experience file structure:
 
-1. e4 (from start position)
-1. c4 (from start position)
-1. Nf3 (from start position)
-1 .. c5 (after 1. e4)
-1 .. d6 (after 1. e4)
+HypnoS implements a persisted learning algorithm, managing a file named experience.bin.
 
-2 positions and a total of 5 moves in those positions
+It is a collection of one or more positions stored with the following format (similar to in memory Brainlearn Transposition Table):
 
-Now imagine HypnoS plays 1. e4 again, it will store this move in the experience file, but it will be duplicate because 1. e4 is already stored. The experience file will now contain the following:
-1. e4 (from start position)
-1. c4 (from start position)
-1. Nf3 (from start position)
-1 .. c5 (after 1. e4)
-1 .. d6 (after 1. e4)
-1. e4 (from start position)
+- _best move_
+- _board signature (hash key)_
+- _best move depth_
+- _best move score_
+- _best move performance_ , a new parameter you can calculate with any learning application supporting this specification.
+This file is loaded in an hashtable at the engine load and updated each time the engine receive quit or stop uci command.
+When BrainLearn starts a new game or when we have max 8 pieces on the chessboard, the learning is activated and the hash table updated each time the engine has a best score
+at a depth >= 4 PLIES, according to HypnoS aspiration window.
 
-Now we have 2 positions, 6 moves, and 1 duplicate move (so effectively the total unique moves is 5)
+At the engine loading, there is an automatic merge to experience.bin files, if we put the other ones, based on the following convention:
 
-Duplicate moves are a problem and should be removed by merging with existing moves. The merge operation will take the move with the highst depth and ignore the other ones. However, when the engine loads the experience file it will only merge duplicate moves in memory without saving the experience file (to make startup and loading experience file faster)
+&lt;fileType&gt;&lt;qualityIndex&gt;.bin
+where
 
-At this point, the experience file is considered fragmented because it contains duplicate moves. The fragmentation percentage is simply: (total duplicate moves) / (total unique moves) * 100
-In this example we have a fragmentation level of: 1/6 * 100 = 16.67%
+- _fileType=experience_
+- _qualityIndex_ , an integer, incrementally from 0 on based on the file&#39;s quality assigned by the user (0 best quality and so on)
 
-  * #### Experience Readonly
-  Default: False If activated, the experience file is only read.
-  
-  * #### Experience Book
-  HypnoS play using the moves stored in the experience file as if it were a book
+N.B.
 
-  * #### Experience Book Width
-    The number of moves to consider from the book for the same position. To play best book move, set this option to ```1```.	
-  * #### Experience Book Max Moves
-	This is a setup to limit the number of moves that can be played by the experience book.
-	If you configure 16, the engine will only play 16 moves (if available).
-	
-  * #### Experience Book Eval Importance 
-Experience book move quality logic:
-
-The quality of experience book moves has been revised heavily based on feedback from users. The new logic relies on a new parameter called (Experience Book Eval Importance) which defines how much weight to assign to experience move evaluation vs. count.
-
-The maximum value for this new parameter is: 10, which means the experience move quality will be 100% based on evaluation, and 0% based on count
-
-The minimum value for this new parameter is: 0, which means the experience move quality will be 0% based on evaluation, and 100% based on count
-
-The default value for this new parameter is: 5, which means the experience move quality will be 50% based on evaluation, and 50% based on count																			  
-
+Because of disk access, less time the engine can think, less effective is the learning.
 
   * #### Variety
 Integer, Default: 0, Min: 0, Max: 40 To play different opening lines from default (0), if not from book (see below).
