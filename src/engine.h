@@ -76,10 +76,6 @@ class Engine {
     void set_tt_size(size_t mb);
     void set_ponderhit(bool);
     void search_clear();
-#ifdef USE_LIVEBOOK
-    void setLiveBookURL(const std::string& newURL);
-    void setLiveBookTimeout(size_t newTimeoutMS);
-#endif
 
     void set_on_update_no_moves(std::function<void(const InfoShort&)>&&);
     void set_on_update_full(std::function<void(const InfoFull&)>&&);
