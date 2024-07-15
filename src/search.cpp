@@ -1910,7 +1910,6 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta,
             }
         }
     }
-    // new variety begin
     if (std::abs(bestValue) == VALUE_INFINITE)
     {
         variety = 0;
@@ -1931,7 +1930,6 @@ Value Search::Worker::qsearch(Position& pos, Stack* ss, Value alpha, Value beta,
             bestValue += increment;
         }
     }
-    // end new variety
     // Step 9. Check for mate
     // All legal moves have been searched. A special case: if we are
     // in check and no legal moves were found, it is checkmate.
