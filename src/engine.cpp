@@ -110,7 +110,7 @@ Engine::Engine(std::string path) :
         options[Util::format_string("Book %d Depth", i + 1)] << Option(255, 1, 255);
         options[Util::format_string("(CTG) Book %d Only Green", i + 1)] << Option(true);
     }
-    options["SyzygyPath"] << Option("<empty>", [](const Option& o) -> std::optional<std::string> {
+    options["SyzygyPath"] << Option("", [](const Option& o) -> std::optional<std::string> {
         Tablebases::init(o);
         return std::nullopt;
     });
