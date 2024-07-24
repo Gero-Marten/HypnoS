@@ -158,8 +158,7 @@ class MovePicker {
                Depth,
                const ButterflyHistory*,
                const CapturePieceToHistory*,
-               const PieceToHistory**,
-               const PawnHistory*,
+               const PawnHistory*);
                Move killer = Move::none());
     MovePicker(const Position&, Move, int, const CapturePieceToHistory*);
     Move next_move(bool skipQuiets = false);
@@ -177,7 +176,7 @@ class MovePicker {
     const CapturePieceToHistory* captureHistory;
     const PieceToHistory**       continuationHistory;
     const PawnHistory*           pawnHistory;
-    Move                         ttMove, killer;
+    Move                         ttMove;
     ExtMove *                    cur, *endMoves, *endBadCaptures, *beginBadQuiets, *endBadQuiets;
     int                          stage;
     int                          threshold;
