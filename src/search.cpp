@@ -379,7 +379,6 @@ void Search::Worker::iterative_deepening() {
 
     int searchAgainCounter = 0;
 
-
     // Iterative deepening loop until requested to stop or the target depth is reached
     while (++rootDepth < MAX_PLY && !threads.stop
            && !(limits.depth && mainThread && rootDepth > limits.depth))
@@ -448,7 +447,7 @@ void Search::Worker::iterative_deepening() {
                         std::stable_sort(rootMoves.begin() + pvIdx, rootMoves.begin() + pvLast);
                 }
                 else
-                    std::stable_sort(rootMoves.begin() + pvIdx, rootMoves.begin() + pvLast);
+                std::stable_sort(rootMoves.begin() + pvIdx, rootMoves.begin() + pvLast);
 
                 // If search has been stopped, we break immediately. Sorting is
                 // safe because RootMoves is still valid, although it refers to
@@ -985,7 +984,7 @@ Value Search::Worker::search(
          // false otherwise. The improving flag is used in various pruning heuristics.
     improving = ss->staticEval > (ss - 2)->staticEval;
      }
- 
+
     opponentWorsening = ss->staticEval + (ss - 1)->staticEval > 2;
 
     // Step 7. Razoring (~1 Elo)
@@ -1013,6 +1012,7 @@ Value Search::Worker::search(
         && (ss - 1)->currentMove != Move::null() && (ss - 1)->statScore < 14389 && eval >= beta
         && ss->staticEval >= beta - 21 * depth + 390 && !excludedMove && pos.non_pawn_material(us)
         && ss->ply >= thisThread->nmpMinPly && beta > VALUE_TB_LOSS_IN_MAX_PLY)
+
     {
         assert(eval - beta >= 0);
 

@@ -96,9 +96,9 @@ Engine::Engine(std::string path) :
     options["nodestime"] << Option(0, 0, 10000);
     options["UCI_Chess960"] << Option(false);
     options["UCI_LimitStrength"] << Option(false);
-    options["UCI_Elo"] << Option(Stockfish::Search::Skill::LowestElo,
-                                 Stockfish::Search::Skill::LowestElo,
-                                 Stockfish::Search::Skill::HighestElo);
+    options["UCI_Elo"] << Option(Hypnos::Search::Skill::LowestElo,
+                                 Hypnos::Search::Skill::LowestElo,
+                                 Hypnos::Search::Skill::HighestElo);
     options["UCI_ShowWDL"] << Option(true);
 
     for (int i = 0; i < BookManager::NumberOfBooks; ++i)
