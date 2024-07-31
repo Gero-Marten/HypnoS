@@ -815,7 +815,7 @@ Value Search::Worker::search(
                 if (expTTValue >= beta)
                 {
                     if (!pos.capture_stage(learningMove->move))
-                        update_quiet_stats(pos, ss, *this, learningMove->move, stat_bonus(depth));
+                        update_quiet_histories(pos, ss, *this, learningMove->move, stat_bonus(depth));
 
                     // Extra penalty for early quiet moves of the previous ply
                     if (prevSq != SQ_NONE && (ss - 1)->moveCount <= 2 && !priorCapture)
